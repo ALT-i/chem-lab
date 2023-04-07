@@ -18,7 +18,7 @@ class SubstanceViewSet(ModelViewSet):
     serializer_class =  SubstanceSerializer
 
     def get_queryset(self):                                      
-        return super().get_queryset().filter(user=self.request.user)
+        return super().get_queryset().filter()
 
 
 class ApparatusViewSet(ModelViewSet):
