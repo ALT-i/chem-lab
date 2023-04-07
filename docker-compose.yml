@@ -18,48 +18,48 @@ services:
         REQUIREMENTS_FILE: dev.txt
     restart: always
     ports:
-      - 8001:8000
+      - 8001:8001
     env_file: .env
-    command: 'sh -c "cp pre-commit.example .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit && ./manage.py migrate && ./manage.py runserver 0.0.0.0:8000"'
+    command: 'sh -c "cp pre-commit.example .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit && ./manage.py migrate && ./manage.py runserver 0.0.0.0:8001"'
     volumes:
       - ./:/app
     depends_on:
       - db
 
-  queue:
-    build:
-      context: .
-      args:
-        REQUIREMENTS_FILE: dev.txt
-    restart: unless-stopped
-    env_file: .env
-    command: sh /entrypoint-queue.sh
-    volumes:
-      - ./:/app
+  # queue:
+  #   build:
+  #     context: .
+  #     args:
+  #       REQUIREMENTS_FILE: dev.txt
+  #   restart: unless-stopped
+  #   env_file: .env
+  #   command: sh /entrypoint-queue.sh
+  #   volumes:
+  #     - ./:/app
 
-  beat:
-    build:
-      context: .
-      args:
-        REQUIREMENTS_FILE: dev.txt
-    restart: unless-stopped
-    env_file: .env
-    command: sh /entrypoint-beat.sh
-    volumes:
-      - ./:/app
+  # beat:
+  #   build:
+  #     context: .
+  #     args:
+  #       REQUIREMENTS_FILE: dev.txt
+  #   restart: unless-stopped
+  #   env_file: .env
+  #   command: sh /entrypoint-beat.sh
+  #   volumes:
+  #     - ./:/app
 
-  redis:
-    image: redis:alpine
-    restart: unless-stopped
-    ports:
-      - 6379:6379
+  # redis:
+  #   image: redis:alpine
+  #   restart: unless-stopped
+  #   ports:
+  #     - 6379:6379
 
-  mailhog:
-    image: mailhog/mailhog:latest
-    restart: always
-    ports:
-      - 1025:1025
-      - 8025:8025
+  # mailhog:
+  #   image: mailhog/mailhog:latest
+  #   restart: always
+  #   ports:
+  #     - 1025:1025
+  #     - 8025:8025
 
 volumes:
   db-data:
