@@ -11,12 +11,11 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = (
             'id',
-            'username',
             'first_name',
             'last_name',
             'profile_picture',
         )
-        read_only_fields = ('username',)
+        read_only_fields = ('id',)
 
 
 class CreateUserSerializer(serializers.ModelSerializer):
@@ -36,7 +35,6 @@ class CreateUserSerializer(serializers.ModelSerializer):
         model = User
         fields = (
             'id',
-            'username',
             'password',
             'first_name',
             'last_name',
