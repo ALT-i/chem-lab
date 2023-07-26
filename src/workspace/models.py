@@ -9,8 +9,21 @@ class Lesson(models.Model):
     title = models.CharField(blank=True, max_length=250)
     instructor = models.ForeignKey(User,  blank=True, null=True, on_delete=models.CASCADE)
     # student = models.ForeignKey(User, blank=True, null=True, on_delete=models.CASCADE)
+    instructions = models.TextField(blank=True, max_length=5000)
     tools = models.ManyToManyField(Apparatus)
     substances = models.ManyToManyField(Substance)
+    parameters = models.CharField(blank=True, max_length=250)
+
+    def __unicode__(self):
+        return u'%s' % self.title
+    
+    def __str__(self):
+        return f"{self.title}"
+
+class LessonSession(models.Model):
+    id = models.UUIDField(primary_key=True, verbose_name='session_id')
+    lesson = models.ForeignKey('Lesson', related_name='sessions', on_delete=models.CASCADE)
+    student = models.ForeignKey(User, related_name='student',on_delete=models.CASCADE)
 
     def __unicode__(self):
         return u'%s' % self.title
