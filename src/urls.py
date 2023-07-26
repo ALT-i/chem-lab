@@ -15,9 +15,11 @@ from drf_yasg import openapi
 from src.social.views import exchange_token, complete_twitter_login
 from src.files.urls import files_router
 from src.users.urls import users_router
+from src.workbench.urls import workbench_router
+from src.workspace.urls import workspace_router
 
 schema_view = get_schema_view(
-    openapi.Info(title="Pastebin API", default_version='v1'),
+    openapi.Info(title="Chem Lab API", default_version='v1'),
     public=True,
 )
 
@@ -25,6 +27,8 @@ router = DefaultRouter()
 
 router.registry.extend(users_router.registry)
 router.registry.extend(files_router.registry)
+router.registry.extend(workbench_router.registry)
+router.registry.extend(workspace_router.registry)
 
 urlpatterns = [
     # admin panel

@@ -16,7 +16,7 @@ if not TESTING:
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-SITE_URL = os.getenv('SITE_URL', 'http://localhost:8000')
+SITE_URL = os.getenv('SITE_URL', 'http://localhost:8001')
 
 
 INSTALLED_APPS = (
@@ -52,6 +52,8 @@ INSTALLED_APPS = (
     'src.social',
     'src.files',
     'src.common',
+    'src.workbench',
+    'src.workspace',
     # Third party optional apps
     # app must be placed somewhere after all the apps that are going to be generating activities
     # 'actstream',                  # activity stream
@@ -300,11 +302,11 @@ REST_FRAMEWORK = {
         'rest_framework.renderers.JSONRenderer',
         'rest_framework.renderers.BrowsableAPIRenderer',
     ),
-    'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated',
-    ],
+    # 'DEFAULT_PERMISSION_CLASSES': [
+    #     'rest_framework.permissions.IsAuthenticated',
+    # ],
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework.authentication.SessionAuthentication',
+        # 'rest_framework.authentication.SessionAuthentication',
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
     'DEFAULT_THROTTLE_CLASSES': [
