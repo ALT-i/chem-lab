@@ -14,11 +14,15 @@ class UserSerializer(serializers.ModelSerializer):
             'first_name',
             'last_name',
             'profile_picture',
+            'progress'
         )
         read_only_fields = ('id',)
 
 
 class CreateUserSerializer(serializers.ModelSerializer):
+    first_name = serializers.CharField(required=False, allow_blank=True)
+    last_name = serializers.CharField(required=False, allow_blank=True)
+    progress = serializers.ListField(child=serializers.IntegerField(), required=False, allow_empty=True)
     profile_picture = ThumbnailerJSONSerializer(required=False, allow_null=True, alias_target='src.users')
     tokens = serializers.SerializerMethodField()
 
@@ -41,6 +45,7 @@ class CreateUserSerializer(serializers.ModelSerializer):
             'email',
             'tokens',
             'profile_picture',
+            'progress'
         )
         read_only_fields = ('tokens',)
         extra_kwargs = {'password': {'write_only': True}}

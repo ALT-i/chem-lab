@@ -9,6 +9,7 @@ from django.urls import reverse
 from django_rest_passwordreset.signals import reset_password_token_created
 from easy_thumbnails.signals import saved_file
 from easy_thumbnails.signal_handlers import generate_aliases_global
+from django.contrib.postgres.fields import ArrayField
 
 from src.common.helpers import build_absolute_uri
 from src.notifications.services import notify, ACTIVITY_USER_RESETS_PASS
@@ -80,6 +81,10 @@ class User(AbstractUser):
     last_name = models.CharField(blank=True, null=True, max_length=250)
     role = models.CharField(max_length=50, choices=Roles.choices, default=Roles.STUDENT)
     email_confirmation = models.BooleanField(default=False)
+    progress =  ArrayField(
+            models.IntegerField(blank=True),
+            null=True
+        )
     referral_code = models.TextField(max_length=50, blank=True, null=True)
 
     USERNAME_FIELD = 'email'
