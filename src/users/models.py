@@ -57,7 +57,6 @@ def password_reset_token_created(sender, instance, reset_password_token, *args, 
     """
     reset_password_path = reverse('password_reset:reset-password-confirm')
     context = {
-        'username': reset_password_token.user.username,
         'email': reset_password_token.user.email,
         'reset_password_url': build_absolute_uri(f'{reset_password_path}?token={reset_password_token.key}'),
     }
@@ -74,12 +73,11 @@ class User(AbstractUser):
         INSTRUCTOR = "INSTRUCTOR", "Instructor"
         STUDENT = "STUDENT", "Student"
 
-    # username = None
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     profile_image = models.ImageField(default='default.png', upload_to='profile_images')
     email = models.EmailField(max_length=254, unique=True)
-    first_name = models.CharField(blank=True, max_length=250)
-    last_name = models.CharField(blank=True, max_length=250)
+    first_name = models.CharField(blank=True, null=True, max_length=250)
+    last_name = models.CharField(blank=True, null=True, max_length=250)
     role = models.CharField(max_length=50, choices=Roles.choices, default=Roles.STUDENT)
     email_confirmation = models.BooleanField(default=False)
     referral_code = models.TextField(max_length=50, blank=True, null=True)
@@ -116,7 +114,7 @@ class User(AbstractUser):
         }
 
     def __str__(self):
-        return self.username
+        return self.email
 
 
 saved_file.connect(generate_aliases_global)
