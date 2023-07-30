@@ -66,14 +66,13 @@ def password_reset_token_created(sender, instance, reset_password_token, *args, 
 
 
 class User(AbstractUser):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    profile_picture = ThumbnailerImageField('ProfilePicture', upload_to='profile_pictures/', blank=True, null=True)
     class Roles(models.TextChoices):
         SUPER = "SUPER", "Super"
         ADMIN = "ADMIN", "Admin"
         INSTRUCTOR = "INSTRUCTOR", "Instructor"
         STUDENT = "STUDENT", "Student"
 
+    username = None
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     profile_image = models.ImageField(default='default.png', upload_to='profile_images')
     email = models.EmailField(max_length=254, unique=True)
