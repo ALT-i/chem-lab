@@ -12,7 +12,7 @@ class UserAdmin(UserAdmin):
     list_filter = ('role', 'is_active',)
     fieldsets = (
         (None, {'fields': ('email', 'password')}),
-        (None, {'fields': ('first_name','last_name','phone_number','address','role', 'is_active', 'email_confirmation')}),
+        (None, {'fields': ('first_name','last_name','role', 'is_active', 'email_confirmation')}),
     )
     add_fieldsets = (
         (None, {
