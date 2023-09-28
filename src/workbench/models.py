@@ -3,7 +3,6 @@ from django.db import models
 # Create your models here.
 
 class Substance(models.Model):
-
     name = models.CharField(blank=True, max_length=250)
     formula = models.CharField(blank=True, max_length=250)
     volume = models.IntegerField(max_length=1000, blank=True, null=True)
@@ -19,7 +18,6 @@ class Substance(models.Model):
 
 
 class Apparatus(models.Model):
-
     class Category(models.TextChoices):
         GLASSWARE = "GLASSWARE", "Glassware"
         TOOL = "TOOL", "Tool"
@@ -43,3 +41,4 @@ class Apparatus(models.Model):
     
     def __str__(self):
         return f"{self.name}"
+    
