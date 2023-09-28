@@ -48,4 +48,4 @@ class LessonSession(models.Model):
 class Procedure(models.Model):
     step_id = models.PositiveSmallIntegerField(blank=False, null=True)
     instruction = models.TextField(max_length=100, blank=False, null=True)
-    lesson = models.ForeignKey(Lesson, on_delete=models.CASCADE, null=True, related_name='Steps')
+    lesson = models.ForeignKey(Lesson, on_delete=models.CASCADE, null=True, related_name='steps')
