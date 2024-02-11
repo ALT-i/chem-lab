@@ -5,6 +5,8 @@ from django.shortcuts import render
 from rest_framework.viewsets import ModelViewSet
 from rest_framework.permissions import IsAuthenticated
 
+from chempy import balance_stoichiometry
+
 from .models import *
 from .serializers import *
 
