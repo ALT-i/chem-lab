@@ -1,10 +1,11 @@
 from rest_framework import serializers
 
+from ..workbench.serializers import SubstanceSerializer, ApparatusSerializer
 from .models import Lesson, Reaction
 
 class LessonSerializer(serializers.ModelSerializer):
-    tools = serializers.StringRelatedField(many=True)
-    substances = serializers.StringRelatedField(many=True)
+    tools = ApparatusSerializer(many=True)
+    substances = SubstanceSerializer(many=True)
     instructor = serializers.StringRelatedField()
     video_file = serializers.FileField()
     class Meta:
