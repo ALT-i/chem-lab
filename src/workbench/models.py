@@ -5,6 +5,7 @@ from django.db import models
 class Substance(models.Model):
 
     name = models.CharField(blank=True, max_length=250)
+    image = models.ImageField(default='default.png', upload_to='substances')
     formula = models.CharField(blank=True, max_length=250)
     volume = models.IntegerField(blank=True, null=True)
     phValue = models.IntegerField(blank=True, null=True)
@@ -32,6 +33,7 @@ class Apparatus(models.Model):
         PLASTIC = "PLASTIC", "Plastic"
     
     name = models.CharField(blank=True, max_length=250)
+    image = models.ImageField(default='default.png', upload_to='apparatus')
     type = models.CharField(blank=True, max_length=250)
     category = models.CharField(max_length=50, choices=Category.choices, default=Category.GLASSWARE)
     material = models.CharField(max_length=50, choices=Material.choices, default=Material.GLASS)
