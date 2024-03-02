@@ -1,3 +1,5 @@
+import os
+
 from django.db import models
 from django.core.exceptions import ValidationError
 
@@ -8,13 +10,19 @@ def validate_svg(file):
     # Check if the content type of the file is SVG
     if not file.content_type == 'image/svg+xml':
         raise ValidationError('Unsupported file type. Only SVG files are allowed.')
+    
+def validate_file_extension(value):
+    ext = os.path.splitext(value.name)[1]  # [0] returns path & filename
+    valid_extensions = ['.svg'] # populate with the extensions that you allow / want
+    if not ext.lower() in valid_extensions:
+        raise ValidationError('Unsupported file extension.')
 
 
 
 class Substance(models.Model):
 
     name = models.CharField(blank=True, max_length=250)
-    image = models.FileField(default='default.png', upload_to='substances', validators=[validate_svg])
+    image = models.FileField(default='default.png', upload_to='substances', validators=[validate_file_extension])
     formula = models.CharField(blank=True, max_length=250)
     volume = models.IntegerField(blank=True, null=True)
     phValue = models.IntegerField(blank=True, null=True)
@@ -42,7 +50,7 @@ class Apparatus(models.Model):
         PLASTIC = "PLASTIC", "Plastic"
     
     name = models.CharField(blank=True, max_length=250)
-    image = models.ImageField(default='default.png', upload_to='apparatus')
+    image = models.FileField(default='default.png', upload_to='substances', validators=[validate_file_extension])
     type = models.CharField(blank=True, max_length=250)
     category = models.CharField(max_length=50, choices=Category.choices, default=Category.GLASSWARE)
     material = models.CharField(max_length=50, choices=Material.choices, default=Material.GLASS)
