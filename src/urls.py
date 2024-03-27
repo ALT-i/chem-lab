@@ -29,7 +29,7 @@ router = DefaultRouter()
 router.registry.extend(users_router.registry)
 # router.registry.extend(files_router.registry)
 router.registry.extend(workbench_router.registry)
-router.registry.extend(workspace_router.registry)
+# router.registry.extend(workspace_router.registry)
 
 urlpatterns = [
     # admin panel
@@ -39,6 +39,7 @@ urlpatterns = [
     path('summernote/', include('django_summernote.urls')),
     # api
     path('api/v1/', include(router.urls)),
+    path('api/v1/', include('src.workspace.urls')),
     url(r'^api/v1/password_reset/', include('django_rest_passwordreset.urls', namespace='password_reset')),
     # auth
     path('api-auth/', include('rest_framework.urls', namespace='rest_framework')),

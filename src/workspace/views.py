@@ -3,6 +3,7 @@ from django.shortcuts import render
 
 from rest_framework.viewsets import ModelViewSet
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from rest_framework import generics, status
@@ -11,10 +12,30 @@ from chempy import balance_stoichiometry, Reaction, Equilibrium
 from chempy.kinetics.ode import get_odesys
 from scipy.integrate import solve_ivp
 
+from chempy.util import pyutil  # For simplifying the output
+
+
 from .models import *
 from .serializers import *
 
 # Create your views here.
+
+@api_view(['POST'])
+def chemical_reaction(request):
+    try:
+        reactants = request.data.get('reactants')
+        # Ensure reactants are provided
+        if not reactants or len(reactants) != 2:
+            return Response({'error': 'Exactly two reactants are required.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Attempt to balance the stoichiometry
+        print(reactants[0], reactants[1])
+        balanced_eq = balance_stoichiometry({reactants[0]}, {reactants[1]})
+        balanced_eq_simplified = pyutil.balanced_reaction_string(balanced_eq)
+        
+        return Response({'reaction': balanced_eq_simplified}, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 class LessonViewSet(ModelViewSet):
     """
