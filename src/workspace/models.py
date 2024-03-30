@@ -15,6 +15,7 @@ class Lesson(models.Model):
     tools = models.ManyToManyField(Apparatus)
     substances = models.ManyToManyField(Substance)
     parameters = models.CharField(blank=True, max_length=250)
+    procedure = models.JSONField(null=True, default=dict)
 
     def __unicode__(self):
         return u'%s' % self.title
