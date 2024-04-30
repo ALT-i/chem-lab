@@ -1,5 +1,5 @@
 from django.db import models
-
+from django.contrib.postgres.fields import ArrayField
 from src.users.models import User
 from src.workbench.models import Apparatus, Substance
 
@@ -7,6 +7,7 @@ from src.workbench.models import Apparatus, Substance
 class Lesson(models.Model):
 
     title = models.CharField(blank=True, max_length=250)
+    image = models.ImageField(upload_to='images/', blank=True, null=True)
     description = models.TextField()
     instructor = models.ForeignKey(User,  blank=True, null=True, on_delete=models.CASCADE)
     video_file = models.FileField(upload_to='videos/') 
@@ -51,13 +52,45 @@ class TitrationExperiment(models.Model):
     final_solution_volume = models.FloatField(null=True, blank=True)
     final_solution_concentration = models.FloatField(null=True, blank=True)
 
+class Exercise(models.Model):
+    lesson = models.ForeignKey(Lesson, related_name='exercises', on_delete=models.CASCADE)
+    title = models.CharField(max_length=255)
 
-# class Apparatus(models.Model):
+    def __str__(self):
+        return f"Exercise: {self.title}"
 
-    
-#     name = models.CharField(blank=True, max_length=250)
-#     type = models.CharField(blank=True, max_length=250)
-#     category = models.CharField(max_length=50, choices=Category.choices, default=Category.GLASSWARE)
-#     material = models.CharField(max_length=50, choices=Material.choices, default=Material.GLASS)
-#     volume = models.IntegerField(max_length=1000, blank=True, null=True)
-#     thermal_properties = models.TextField(max_length=256, blank=True, null=True)
+class Question(models.Model):
+    exercise = models.ForeignKey(Exercise, related_name='questions', on_delete=models.CASCADE)
+    text = models.TextField()
+    question_type = models.CharField(max_length=50)  # e.g., 'multiple_choice', 'fill_in_the_blank'
+    correct_answer = models.TextField(blank=True, null=True)  # Use for fill-in-the-blank or other open-ended questions
+
+    def __str__(self):
+        return f"Question: {self.text[:50]}..."
+
+class Option(models.Model):
+    question = models.ForeignKey(Question, related_name='options', on_delete=models.CASCADE)
+    text = models.CharField(max_length=255)
+    is_correct = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f"Option: {self.text}"
+
+class Submission(models.Model):
+    student = models.ForeignKey(User, on_delete=models.CASCADE)
+    exercise = models.ForeignKey(Exercise, on_delete=models.CASCADE)
+    submission_time = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('student', 'exercise')
+
+class Answer(models.Model):
+    submission = models.ForeignKey(Submission, related_name='answers', on_delete=models.CASCADE)
+    question = models.ForeignKey(Question, on_delete=models.CASCADE)
+    selected_option = models.ForeignKey(Option, on_delete=models.CASCADE, blank=True, null=True)  # For multiple-choice
+    text_answer = models.TextField(blank=True, null=True)  # For open-ended questions
+
+    def __str__(self):
+        if self.selected_option:
+            return f"Selected Option: {self.selected_option.text}"
+        return f"Answer: {self.text_answer}"
