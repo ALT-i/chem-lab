@@ -8,6 +8,7 @@ class LessonSerializer(serializers.ModelSerializer):
     substances = SubstanceSerializer(many=True)
     instructor = serializers.StringRelatedField()
     video_file = serializers.FileField()
+    image_file = serializers.FileField()
     class Meta:
         model = Lesson
         fields = '__all__'
