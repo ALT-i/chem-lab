@@ -1,13 +1,28 @@
+import os
 from django.db import models
 from django.contrib.postgres.fields import ArrayField
 from src.users.models import User
 from src.workbench.models import Apparatus, Substance
+from django.core.exceptions import ValidationError
+
+
+# Create your models here.
+def validate_svg(file):
+    # Check if the content type of the file is SVG
+    if not file.content_type == 'image/svg+xml':
+        raise ValidationError('Unsupported file type. Only SVG files are allowed.')
+    
+def validate_file_extension(value):
+    ext = os.path.splitext(value.name)[1]  # [0] returns path & filename
+    valid_extensions = ['.svg'] # populate with the extensions that you allow / want
+    if not ext.lower() in valid_extensions:
+        raise ValidationError('Unsupported file extension.')
 
 # Create your models here.
 class Lesson(models.Model):
 
     title = models.CharField(blank=True, max_length=250)
-    image = models.ImageField(upload_to='images/', blank=True, null=True)
+    image = models.FileField(default='default.png', upload_to='lessons', validators=[validate_file_extension])
     description = models.TextField()
     instructor = models.ForeignKey(User,  blank=True, null=True, on_delete=models.CASCADE)
     video_file = models.FileField(upload_to='videos/') 
