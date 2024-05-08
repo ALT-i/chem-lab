@@ -41,7 +41,7 @@ class LessonViewSet(ModelViewSet):
     """
         CRUD operations on Lesson objects
     """
-    queryset  = Lesson.objects.all().order_by('title')
+    queryset  = Lesson.objects.all().order_by('id')
     serializer_class =  LessonSerializer
     filterset_fields = ['title']
 
