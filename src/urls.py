@@ -15,6 +15,7 @@ from drf_yasg import openapi
 from src.social.views import exchange_token, complete_twitter_login
 from src.files.urls import files_router
 from src.users.urls import users_router
+from src.users.views import RegisterViewSet
 from src.workbench.urls import workbench_router
 from src.workspace.urls import workspace_router
 
@@ -26,9 +27,9 @@ schema_view = get_schema_view(
 router = DefaultRouter()
 
 router.registry.extend(users_router.registry)
-router.registry.extend(files_router.registry)
+# router.registry.extend(files_router.registry)
 router.registry.extend(workbench_router.registry)
-router.registry.extend(workspace_router.registry)
+# router.registry.extend(workspace_router.registry)
 
 urlpatterns = [
     # admin panel
@@ -38,10 +39,12 @@ urlpatterns = [
     path('summernote/', include('django_summernote.urls')),
     # api
     path('api/v1/', include(router.urls)),
+    path('api/v1/', include('src.workspace.urls')),
     url(r'^api/v1/password_reset/', include('django_rest_passwordreset.urls', namespace='password_reset')),
     # auth
     path('api-auth/', include('rest_framework.urls', namespace='rest_framework')),
-    path('api/v1/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    # path('api/v1/register/', RegisterViewSet.as_view(), name='signup'),
+    path('api/v1/login/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/v1/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     # social login
     url('', include('social_django.urls', namespace='social')),

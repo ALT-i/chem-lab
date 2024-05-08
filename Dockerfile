@@ -15,10 +15,12 @@ RUN set -x && \
 	wget -O /wait-for https://raw.githubusercontent.com/eficode/wait-for/master/wait-for && \
 	chmod +x /wait-for
 
-CMD ["sh", "/entrypoint-web.sh"]
 COPY ./docker/ /
 
 COPY ./requirements/ ./requirements
 RUN pip install -r ./requirements/prod.txt
 
 COPY . ./
+
+CMD python manage.py collectstatic --no-input && python manage.py migrate && python manage.py runserver 0.0.0.0:8000
+

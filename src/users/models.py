@@ -9,6 +9,7 @@ from django.urls import reverse
 from django_rest_passwordreset.signals import reset_password_token_created
 from easy_thumbnails.signals import saved_file
 from easy_thumbnails.signal_handlers import generate_aliases_global
+from django.contrib.postgres.fields import ArrayField
 
 from src.common.helpers import build_absolute_uri
 from src.notifications.services import notify, ACTIVITY_USER_RESETS_PASS
@@ -57,7 +58,6 @@ def password_reset_token_created(sender, instance, reset_password_token, *args, 
     """
     reset_password_path = reverse('password_reset:reset-password-confirm')
     context = {
-        'username': reset_password_token.user.username,
         'email': reset_password_token.user.email,
         'reset_password_url': build_absolute_uri(f'{reset_password_path}?token={reset_password_token.key}'),
     }
@@ -66,31 +66,30 @@ def password_reset_token_created(sender, instance, reset_password_token, *args, 
 
 
 class User(AbstractUser):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    profile_picture = ThumbnailerImageField('ProfilePicture', upload_to='profile_pictures/', blank=True, null=True)
     class Roles(models.TextChoices):
         SUPER = "SUPER", "Super"
         ADMIN = "ADMIN", "Admin"
         INSTRUCTOR = "INSTRUCTOR", "Instructor"
         STUDENT = "STUDENT", "Student"
 
-    # username = None
+    username = None
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     profile_image = models.ImageField(default='default.png', upload_to='profile_images')
     email = models.EmailField(max_length=254, unique=True)
-    first_name = models.CharField(blank=True, max_length=250)
-    last_name = models.CharField(blank=True, max_length=250)
+    first_name = models.CharField(blank=True, null=True, max_length=250)
+    last_name = models.CharField(blank=True, null=True, max_length=250)
     role = models.CharField(max_length=50, choices=Roles.choices, default=Roles.STUDENT)
     email_confirmation = models.BooleanField(default=False)
+    progress =  ArrayField(
+            models.IntegerField(blank=True),
+            null=True
+        )
     referral_code = models.TextField(max_length=50, blank=True, null=True)
 
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['role']
 
     objects = CustomUserManager()
-
-    def __str__(self):
-        return self.email
 
     # def email_user(self, *args, **kwargs):
     #     sengridMail=mail.SendEmail()
@@ -116,7 +115,6 @@ class User(AbstractUser):
         }
 
     def __str__(self):
-        return self.username
-
+        return f'{self.first_name} {self.last_name}'
 
 saved_file.connect(generate_aliases_global)

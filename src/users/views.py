@@ -1,4 +1,5 @@
 from rest_framework import viewsets, mixins
+from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -8,15 +9,24 @@ from src.users.models import User
 from src.users.permissions import IsUserOrReadOnly
 from src.users.serializers import CreateUserSerializer, UserSerializer
 
-
-class UserViewSet(mixins.RetrieveModelMixin, mixins.UpdateModelMixin, mixins.CreateModelMixin, viewsets.GenericViewSet):
+# view for registering users
+class RegisterViewSet(mixins.CreateModelMixin, viewsets.GenericViewSet):
+    queryset = User.objects.all()
+    serializer_class = CreateUserSerializer
+    # def post(self, request, format=None):
+    #     serializer = CreateUserSerializer(data=request.data)
+    #     serializer.is_valid(raise_exception=True)
+    #     serializer.save()
+    #     return Response(serializer.data, status=status.HTTP_201_CREATED)
+    
+class UserViewSet(mixins.RetrieveModelMixin, mixins.UpdateModelMixin,  viewsets.GenericViewSet):
     """
     Creates, Updates and Retrieves - User Accounts
     """
 
     queryset = User.objects.all()
-    serializers = {'default': UserSerializer, 'create': CreateUserSerializer}
-    permissions = {'default': (IsUserOrReadOnly,), 'create': (AllowAny,)}
+    serializers = {'default': UserSerializer}
+    permissions = {'default': (IsUserOrReadOnly,)}
 
     def get_serializer_class(self):
         return self.serializers.get(self.action, self.serializers['default'])
