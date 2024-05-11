@@ -49,6 +49,22 @@ class CustomUserManager(BaseUserManager):
             raise ValueError(_('Superuser must have is_superuser=True.'))
         return self.create_user(email, password, **extra_fields)
 
+    def create_instructor(self, email, password, **extra_fields):
+        """
+        Create and save an instructor with the given email and password.
+        """
+
+        # email = self.normalize_email(email)
+        # user = self.model(email=email, **extra_fields)
+        # user.role = Roles.CUSTOMER)
+        extra_fields.setdefault('is_staff', True)
+        extra_fields.setdefault('is_superuser', False)
+        extra_fields.setdefault('is_active', True)
+
+        if extra_fields.get('is_staff') is not True:
+            raise ValueError(_('Instructor must have is_staff=True.'))
+        return self.create_user(email, password, **extra_fields)
+
 
 @receiver(reset_password_token_created)
 def password_reset_token_created(sender, instance, reset_password_token, *args, **kwargs):
@@ -81,9 +97,9 @@ class User(AbstractUser):
     role = models.CharField(max_length=50, choices=Roles.choices, default=Roles.STUDENT)
     email_confirmation = models.BooleanField(default=False)
     progress =  ArrayField(
-            models.IntegerField(blank=True),
-            null=True
-        )
+        models.IntegerField(blank=True),
+        null=True
+    )
     referral_code = models.TextField(max_length=50, blank=True, null=True)
 
     USERNAME_FIELD = 'email'

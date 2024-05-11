@@ -1,5 +1,6 @@
-from django.db.models.expressions import RawSQL
 import json
+from django.db.models import Q
+from django.db.models.expressions import RawSQL
 from django.shortcuts import render
 
 from rest_framework import status
@@ -20,7 +21,6 @@ class SubstanceViewSet(ModelViewSet):
     """
     queryset  = Substance.objects.all()
     serializer_class =  SubstanceSerializer
-    filterset_fields = ['name']
 
     def get_queryset(self):                                      
         return super().get_queryset()
@@ -39,10 +39,10 @@ class SubstanceViewSet(ModelViewSet):
         return Response({"message": "Substance created successfully", "data": serializer.data}, status=status.HTTP_201_CREATED, headers=headers)
     
     def list(self, request):
-        filter_obj = request.query_params.get('name')
+        name_search = request.query_params.get('search')
         queryset = self.get_queryset()
-        if filter_obj:
-            queryset = self.queryset.filter(name__contains = filter_obj)
+        if name_search:
+            queryset = self.queryset.filter(name__icontains = name_search).values()
         try:
             page = self.paginate_queryset(queryset)
             if page is not None:
@@ -50,7 +50,7 @@ class SubstanceViewSet(ModelViewSet):
                 return self.get_paginated_response(serializer.data)
 
             serializer = self.get_serializer(queryset, many=True)
-            return Response({"message": "Substance retrived successfully", "data": serializer.data}, status=status.HTTP_200_OK)
+            return Response({"message": "Substances retrived successfully", "data": serializer.data}, status=status.HTTP_200_OK)
         except:
             return Response({"message": "Something went wrong"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
@@ -88,9 +88,9 @@ class ApparatusViewSet(ModelViewSet):
     """
         CRUD operations on Apparatus objects
     """
-    queryset  = Apparatus.objects.all().order_by('name')
+    queryset  = Apparatus.objects.all()
     serializer_class =  ApparatusSerializer
-    filterset_fields = ['name', 'type', 'category', 'material']
+    filterset_fields = ['type', 'category', 'material']
 
     def get_queryset(self):                                      
         return super().get_queryset()
@@ -109,10 +109,17 @@ class ApparatusViewSet(ModelViewSet):
         return Response({"message": "Apparatus created successfully", "data": serializer.data}, status=status.HTTP_201_CREATED, headers=headers)
     
     def list(self, request):
-        filter_obj = request.query_params.get('name')
+        # Query parameters
+        name_search = request.query_params.get('search') if request.query_params.get('search') else '' 
+        type_search = request.query_params.get('type') if request.query_params.get('type') else ''
+        category_search = request.query_params.get('category') if request.query_params.get('category') else ''
+        material_search = request.query_params.get('material') if request.query_params.get('material') else ''
+        
         queryset = self.get_queryset()
-        if filter_obj:
-            queryset = self.queryset.filter(name__contains = filter_obj)
+        
+        if name_search or type_search or category_search or material_search:
+            queryset = self.queryset.filter(type__contains=type_search, category__contains=category_search, material__contains=material_search, name__icontains = name_search).values()
+        
         try:
             page = self.paginate_queryset(queryset)
             if page is not None:
