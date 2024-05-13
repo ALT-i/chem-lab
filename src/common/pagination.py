@@ -12,7 +12,7 @@ class CustomPagination(LimitOffsetPagination):
                     'count': self.count,
                     'results': data
                 },
-                'message' : 'items retrived successfully'
+                'message' : 'Items retrived successfully'
             },
             status=status.HTTP_200_OK
         )
