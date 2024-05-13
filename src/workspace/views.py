@@ -62,10 +62,11 @@ class LessonViewSet(ModelViewSet):
         return Response({"message": "Lesson created successfully", "data": serializer.data}, status=status.HTTP_201_CREATED, headers=headers)
     
     def list(self, request):
-        filter_obj = request.query_params.get('title')
         queryset = self.get_queryset()
-        if filter_obj:
-            queryset = self.queryset.filter(name__contains = filter_obj)
+        queryset = self.queryset.filter(
+            title__contains = request.query_params.get('title') if request.query_params.get('title') else '',
+            instructor__id__contains = request.query_params.get('instructor') if request.query_params.get('instructor') else ''
+        )
         try:
             page = self.paginate_queryset(queryset)
             if page is not None:

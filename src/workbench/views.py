@@ -39,10 +39,10 @@ class SubstanceViewSet(ModelViewSet):
         return Response({"message": "Substance created successfully", "data": serializer.data}, status=status.HTTP_201_CREATED, headers=headers)
     
     def list(self, request):
-        name_search = request.query_params.get('search')
         queryset = self.get_queryset()
-        if name_search:
-            queryset = self.queryset.filter(name__icontains = name_search).values()
+        queryset = self.queryset.filter(
+            name__icontains = request.query_params.get('search') if request.query_params.get('search') else '',
+        ).values()
         try:
             page = self.paginate_queryset(queryset)
             if page is not None:
@@ -109,16 +109,14 @@ class ApparatusViewSet(ModelViewSet):
         return Response({"message": "Apparatus created successfully", "data": serializer.data}, status=status.HTTP_201_CREATED, headers=headers)
     
     def list(self, request):
-        # Query parameters
-        name_search = request.query_params.get('search') if request.query_params.get('search') else '' 
-        type_search = request.query_params.get('type') if request.query_params.get('type') else ''
-        category_search = request.query_params.get('category') if request.query_params.get('category') else ''
-        material_search = request.query_params.get('material') if request.query_params.get('material') else ''
         
         queryset = self.get_queryset()
-        
-        if name_search or type_search or category_search or material_search:
-            queryset = self.queryset.filter(type__contains=type_search, category__contains=category_search, material__contains=material_search, name__icontains = name_search).values()
+        queryset = self.queryset.filter(    # Query parameters filteration
+            type__contains = request.query_params.get('type') if request.query_params.get('type') else '', 
+            category__contains = request.query_params.get('category') if request.query_params.get('category') else '', 
+            material__contains = request.query_params.get('material') if request.query_params.get('material') else '',
+            name__icontains = request.query_params.get('search') if request.query_params.get('search') else ''
+        ).values()
         
         try:
             page = self.paginate_queryset(queryset)

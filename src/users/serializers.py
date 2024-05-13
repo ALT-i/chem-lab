@@ -25,7 +25,7 @@ class CreateUserSerializer(serializers.ModelSerializer):
     last_name = serializers.CharField(required=False, allow_blank=True)
     role = serializers.ChoiceField(choices=User.Roles, default=User.Roles.STUDENT)
     progress = serializers.ListField(child=serializers.IntegerField(), required=False, allow_empty=True)
-    profile_picture = ThumbnailerJSONSerializer(required=False, allow_null=True, alias_target='src.users')
+    profile_image = ThumbnailerJSONSerializer(required=False, allow_null=True, alias_target='src.users')
     tokens = serializers.SerializerMethodField()
 
     def get_tokens(self, user):
@@ -55,7 +55,7 @@ class CreateUserSerializer(serializers.ModelSerializer):
             'email',
             'role',
             'tokens',
-            'profile_picture',
+            'profile_image',
             'progress'
         )
         read_only_fields = ('tokens', 'role', )

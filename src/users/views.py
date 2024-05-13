@@ -38,6 +38,14 @@ class UserViewSet(mixins.RetrieveModelMixin, mixins.UpdateModelMixin,  viewsets.
         self.permission_classes = self.permissions.get(self.action, self.permissions['default'])
         return super().get_permissions()
     
+    def retrieve(self, request, *args, **kwargs):
+        try:
+            instance = self.get_object()
+            serializer = self.get_serializer(instance)
+            return Response({"message":"User retrived successfully", "data": serializer.data}, status=status.HTTP_200_OK)
+        except:
+            return Response({"message": "Not found"}, status=status.HTTP_404_NOT_FOUND)
+    
     @action(detail=False, methods=['get'], url_path='me', url_name='me')
     def get_user_data(self, instance):
         try:
@@ -46,11 +54,12 @@ class UserViewSet(mixins.RetrieveModelMixin, mixins.UpdateModelMixin,  viewsets.
             return Response({'error': 'Wrong auth token'}, status=status.HTTP_400_BAD_REQUEST) 
         
     def list(self, request): 
-        user_search = request.query_params.get('search') if request.query_params.get('search') else ''
-        role_search = request.query_params.get('role') if request.query_params.get('role') else ''
         queryset = self.get_queryset()
-        if role_search or user_search:
-            queryset = self.queryset.filter(Q(first_name__icontains=user_search) | Q(last_name__icontains=user_search), role=role_search).values()
+        print(queryset)
+        queryset = self.queryset.filter(
+            Q(first_name__icontains = request.query_params.get('search') if request.query_params.get('search') else '') | Q(last_name__icontains = request.query_params.get('search') if request.query_params.get('search') else ''), 
+            role__contains = request.query_params.get('role') if request.query_params.get('role') else ''
+        ).values()
         try:
             page = self.paginate_queryset(queryset)
             if page is not None:

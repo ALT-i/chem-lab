@@ -5,7 +5,6 @@ from src.users.models import User
 from src.workbench.models import Apparatus, Substance
 from django.core.exceptions import ValidationError
 
-
 # Create your models here.
 def validate_svg(file):
     # Check if the content type of the file is SVG
@@ -18,15 +17,19 @@ def validate_file_extension(value):
     if not ext.lower() in valid_extensions:
         raise ValidationError('Unsupported file extension.')
 
+def validate_instructor(user):
+    user = User.objects.get(id=user)
+    # Validate that user selectedis an instructor or admin
+    if (user.role != User.Roles.ADMIN) or (user.role != User.Roles.INSTRUCTOR):
+        raise ValidationError("This user can not be selected as an instructor")
+
 # Create your models here.
 class Lesson(models.Model):
-
     title = models.CharField(blank=True, max_length=250)
-    image = models.FileField(default='default.png', upload_to='lessons', validators=[validate_file_extension])
+    image = models.FileField(default='default.svg', upload_to='lessons', validators=[validate_file_extension])
     description = models.TextField()
-    instructor = models.ForeignKey(User,  blank=True, null=True, on_delete=models.CASCADE)
-    video_file = models.FileField(upload_to='videos/') 
-    # student = models.ForeignKey(User, blank=True, null=True, on_delete=models.CASCADE)
+    instructor = models.ForeignKey(User,  blank=True, null=True, on_delete=models.CASCADE, validators=[validate_instructor])
+    video_file = models.FileField(upload_to='videos/')
     instructions = models.TextField(blank=True, max_length=5000)
     tools = models.ManyToManyField(Apparatus)
     substances = models.ManyToManyField(Substance)
