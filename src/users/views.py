@@ -55,21 +55,20 @@ class UserViewSet(mixins.RetrieveModelMixin, mixins.UpdateModelMixin,  viewsets.
         
     def list(self, request): 
         queryset = self.get_queryset()
-        print(queryset)
         queryset = self.queryset.filter(
             Q(first_name__icontains = request.query_params.get('search') if request.query_params.get('search') else '') | Q(last_name__icontains = request.query_params.get('search') if request.query_params.get('search') else ''), 
             role__contains = request.query_params.get('role') if request.query_params.get('role') else ''
         ).values()
-        try:
-            page = self.paginate_queryset(queryset)
-            if page is not None:
-                serializer = self.get_serializer(page, many=True)
-                return self.get_paginated_response(serializer.data)
+        # try:
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
 
-            serializer = self.get_serializer(queryset, many=True)
-            return Response({"message": "Users retrived successfully", "data": serializer.data}, status=status.HTTP_200_OK)
-        except:
-            return Response({"message": "Something went wrong"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        serializer = self.get_serializer(queryset, many=True)
+        #     return Response({"message": "Users retrived successfully", "data": serializer.data}, status=status.HTTP_200_OK)
+        # except:
+        #     return Response({"message": "Something went wrong"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     @action(detail=False, methods=['post'], url_path='official', url_name='official')
     def create_official(self, request):

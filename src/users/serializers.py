@@ -18,6 +18,15 @@ class UserSerializer(serializers.ModelSerializer):
             'progress',
         )
         read_only_fields = ('id', 'role',)
+        
+    def to_representation(self, instance):
+        """Remove progress form non-student user data"""
+        ret = super().to_representation(instance)
+        if ret['role'] != User.Roles.STUDENT: 
+            ret.pop('progress')
+        return ret
+        
+        
 
 
 class CreateUserSerializer(serializers.ModelSerializer):
