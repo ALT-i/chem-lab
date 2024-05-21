@@ -34,7 +34,7 @@ class Lesson(models.Model):
     title = models.CharField(blank=True, max_length=250)
     image = models.CharField(default='default.svg', blank=True, null=True, max_length=256, validators=[validate_image_file_extension])
     description = models.TextField()
-    instructor = models.ForeignKey(User,  blank=True, null=True, on_delete=models.CASCADE, validators=[validate_instructor])
+    instructor = models.ForeignKey(User,  blank=True, null=False, on_delete=models.CASCADE, validators=[validate_instructor])
     video_file = models.CharField(default='default.mp4', blank=True, null=True, max_length=256, validators=[validate_video_file_extension])
     instructions = models.TextField(blank=True, max_length=5000)
     tools = models.ManyToManyField(Apparatus)
