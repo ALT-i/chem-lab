@@ -19,7 +19,7 @@ class SubstanceViewSet(ModelViewSet):
     """
         CRUD operations on Substance objects
     """
-    queryset  = Substance.objects.all()
+    queryset  = Substance.objects.all().order_by('id')
     serializer_class =  SubstanceSerializer
 
     def get_queryset(self):                                      
@@ -88,7 +88,7 @@ class ApparatusViewSet(ModelViewSet):
     """
         CRUD operations on Apparatus objects
     """
-    queryset  = Apparatus.objects.all()
+    queryset  = Apparatus.objects.all().order_by('id')
     serializer_class =  ApparatusSerializer
     filterset_fields = ['type', 'category', 'material']
 

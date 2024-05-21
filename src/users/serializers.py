@@ -5,7 +5,7 @@ from src.common.serializers import ThumbnailerJSONSerializer
 
 
 class UserSerializer(serializers.ModelSerializer):
-    profile_picture = ThumbnailerJSONSerializer(required=False, allow_null=True, alias_target='src.users')
+    image = serializers.CharField(required=False, allow_blank=True)
 
     class Meta:
         model = User
@@ -13,20 +13,32 @@ class UserSerializer(serializers.ModelSerializer):
             'id',
             'first_name',
             'last_name',
-            'profile_picture',
+            'email',
+            'image',
+            'title',
+            'level',
+            'matric_number',
+            'department',
+            'office',
+            'phone',
             'role',
             'progress',
         )
-        read_only_fields = ('id', 'role',)
+        read_only_fields = ('id', 'role', 'email')
         
     def to_representation(self, instance):
-        """Remove progress form non-student user data"""
+        """Remove redundant info form user data"""
         ret = super().to_representation(instance)
-        if ret['role'] != User.Roles.STUDENT: 
-            ret.pop('progress')
+        if ret['role'] == User.Roles.STUDENT:
+            for items in ['office', 'title']:
+                ret.pop(items)
+        if ret['role'] == User.Roles.INSTRUCTOR: 
+            for items in ['progress', 'level', 'department', 'matric_number']:
+                ret.pop(items)
+        if ret['role'] == User.Roles.ADMIN: 
+            for items in ['office', 'progress', 'level', 'department', 'matric_number']:
+                ret.pop(items)
         return ret
-        
-        
 
 
 class CreateUserSerializer(serializers.ModelSerializer):
@@ -34,7 +46,7 @@ class CreateUserSerializer(serializers.ModelSerializer):
     last_name = serializers.CharField(required=False, allow_blank=True)
     role = serializers.ChoiceField(choices=User.Roles, default=User.Roles.STUDENT)
     progress = serializers.ListField(child=serializers.IntegerField(), required=False, allow_empty=True)
-    profile_image = ThumbnailerJSONSerializer(required=False, allow_null=True, alias_target='src.users')
+    image = serializers.CharField(required=False, allow_blank=True)
     tokens = serializers.SerializerMethodField()
 
     def get_tokens(self, user):
@@ -61,10 +73,16 @@ class CreateUserSerializer(serializers.ModelSerializer):
             'password',
             'first_name',
             'last_name',
+            'title',
+            'office',
+            'level',
+            'matric_number',
+            'department',
+            'phone',
             'email',
             'role',
             'tokens',
-            'profile_image',
+            'image',
             'progress'
         )
         read_only_fields = ('tokens', 'role', )

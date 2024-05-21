@@ -1,4 +1,6 @@
 import uuid
+import os
+from datetime import datetime
 from django.db import models
 from django.dispatch import receiver
 from django.contrib.auth.base_user import BaseUserManager
@@ -10,6 +12,7 @@ from django_rest_passwordreset.signals import reset_password_token_created
 from easy_thumbnails.signals import saved_file
 from easy_thumbnails.signal_handlers import generate_aliases_global
 from django.contrib.postgres.fields import ArrayField
+from django.core.exceptions import ValidationError
 
 from src.common.helpers import build_absolute_uri
 from src.notifications.services import notify, ACTIVITY_USER_RESETS_PASS
@@ -80,22 +83,35 @@ def password_reset_token_created(sender, instance, reset_password_token, *args, 
 
     notify(ACTIVITY_USER_RESETS_PASS, context=context, email_to=[reset_password_token.user.email])
 
-
+def validate_image_file_extension(value):
+    ext = os.path.splitext(value)[1]  # [0] returns path & filename
+    valid_extensions = ['.svg', '.png', '.jpg', '.jpeg' ] # populate with the extensions that you allow / want
+    if not ext.lower() in valid_extensions:
+        raise ValidationError('Unsupported file extension.')
+    
 class User(AbstractUser):
     class Roles(models.TextChoices):
         SUPER = "SUPER", "Super"
         ADMIN = "ADMIN", "Admin"
         INSTRUCTOR = "INSTRUCTOR", "Instructor"
         STUDENT = "STUDENT", "Student"
+    
 
     username = None
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    profile_image = models.ImageField(default='default.png', upload_to='profile_images')
+    image = models.CharField(default='default.png', blank=True, null=True, max_length=256, validators=[validate_image_file_extension])
     email = models.EmailField(max_length=254, unique=True)
+    level = models.IntegerField(blank=True, null=True )
+    phone = models.CharField(blank=True, null=True, max_length=250)
+    matric_number = models.CharField(blank=True, null=True, max_length=250)
+    department = models.CharField(blank=True, null=True, max_length=250)
+    office = models.CharField(blank=True, null=True, max_length=250)
+    title = models.CharField(blank=True, null=True, max_length=250)
     first_name = models.CharField(blank=True, null=True, max_length=250)
     last_name = models.CharField(blank=True, null=True, max_length=250)
     role = models.CharField(max_length=50, choices=Roles.choices, default=Roles.STUDENT)
     email_confirmation = models.BooleanField(default=False)
+    date_joined = models.CharField(max_length=50, default=datetime.now(), null=True, blank=False)
     progress =  ArrayField(
         models.IntegerField(blank=True),
         null=True
@@ -119,7 +135,7 @@ class User(AbstractUser):
     #     )
 
     def get_full_name(self) -> str:
-        return super().get_full_name()
+        return super().get_full_name() 
 
 
     def get_tokens(self):
