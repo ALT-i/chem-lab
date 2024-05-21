@@ -14,6 +14,6 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name='lesson',
             name='image',
-            field=models.FileField(default='default.png', upload_to='lessons', validators=[src.workspace.models.validate_file_extension]),
+            field=models.FileField(default='default.png', upload_to='lessons', validators=[src.workspace.models.validate_image_file_extension]),
         ),
     ]

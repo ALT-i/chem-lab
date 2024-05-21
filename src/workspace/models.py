@@ -11,10 +11,16 @@ def validate_svg(file):
     if not file.content_type == 'image/svg+xml':
         raise ValidationError('Unsupported file type. Only SVG files are allowed.')
     
-def validate_file_extension(value):
-    ext = os.path.splitext(value.name)[1]  # [0] returns path & filename
-    valid_extensions = ['.svg'] # populate with the extensions that you allow / want
+def validate_image_file_extension(value):
+    ext = os.path.splitext(value)[1]  # [0] returns path & filename
+    valid_extensions = ['.svg', '.png', '.jpg', '.jpeg'] # populate with the extensions that you allow / want
     if not ext.lower() in valid_extensions:
+        raise ValidationError('Unsupported file extension.')
+
+def validate_video_file_extension(value):
+    ext = os.path.splitext(value)[1]  # [0] returns path & filename
+    invalid_extensions = ['.mkv'] # populate with the extensions that you allow / want
+    if ext.lower() in invalid_extensions:
         raise ValidationError('Unsupported file extension.')
 
 def validate_instructor(user):
@@ -26,14 +32,14 @@ def validate_instructor(user):
 # Create your models here.
 class Lesson(models.Model):
     title = models.CharField(blank=True, max_length=250)
-    image = models.FileField(default='default.svg', upload_to='lessons', validators=[validate_file_extension])
+    image = models.CharField(default='default.svg', blank=True, null=True, max_length=256, validators=[validate_image_file_extension])
     description = models.TextField()
-    instructor = models.ForeignKey(User,  blank=True, null=True, on_delete=models.CASCADE, validators=[validate_instructor])
-    video_file = models.FileField(upload_to='videos/')
+    instructor = models.ForeignKey(User,  blank=True, null=False, on_delete=models.CASCADE, validators=[validate_instructor])
+    video_file = models.CharField(default='default.mp4', blank=True, null=True, max_length=256, validators=[validate_video_file_extension])
     instructions = models.TextField(blank=True, max_length=5000)
     tools = models.ManyToManyField(Apparatus)
     substances = models.ManyToManyField(Substance)
-    parameters = models.CharField(blank=True, max_length=250)
+    parameters = models.CharField(blank=True, max_length=250, default="cm3")
     procedure = models.JSONField(null=True, default=dict)
 
     def __unicode__(self):

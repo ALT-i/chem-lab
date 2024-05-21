@@ -41,30 +41,52 @@ class LessonViewSet(ModelViewSet):
     """
         CRUD operations on Lesson objects
     """
-    queryset  = Lesson.objects.all().order_by('id')
+    queryset  = Lesson.objects.all()
     serializer_class =  LessonSerializer
-    filterset_fields = ['title']
+    # filterset_fields = ['title']
 
     def get_queryset(self):                                      
         return super().get_queryset()
     
-    def perform_create(self, serializer):
-        serializer.save()
+    # def perform_create(self, serializer):
+    #     # In case of using the serializer 
+    #     serializer.save()
         
     def create(self, request, *args, **kwargs):
+        # Regular logic going through the serializer
         serializer = self.get_serializer(data=request.data)
         try:
-            serializer.is_valid(raise_exception=True)
-        except:
-            return Response({"message": "Invalid data"}, status=status.HTTP_400_BAD_REQUEST)
+          serializer.is_valid(raise_exception=True)
+        except Exception as e :
+          return Response({"message": e}, status=status.HTTP_400_BAD_REQUEST)
         self.perform_create(serializer)
         headers = self.get_success_headers(serializer.data)
-        return Response({"message": "Lesson created successfully", "data": serializer.data}, status=status.HTTP_201_CREATED, headers=headers)
+        
+        # Removing tools and substance from payload to avoid complications
+        tools = request.data.pop('tools')    
+        substances = request.data.pop('substances')     
+        
+        # Creating lesson 
+        lesson = Lesson.objects.create(**request.data)
+        
+        # Saving tools and substances to created lesson 
+        lesson.tools.set(tools)
+        lesson.substances.set(substances)
+        lesson.save()
+        
+        # Serializing lesson instance for response data 
+        serializer = self.get_serializer(lesson)
+        headers = self.get_success_headers(serializer.data)
+        return Response(
+            {"message": "Lesson created successfully", "data": serializer.data}, 
+            status=status.HTTP_201_CREATED,
+            headers=headers
+        )
     
     def list(self, request):
         queryset = self.get_queryset()
         queryset = self.queryset.filter(
-            title__contains = request.query_params.get('title') if request.query_params.get('title') else '',
+            title__icontains = request.query_params.get('search') if request.query_params.get('search') else '',
             instructor__id__contains = request.query_params.get('instructor') if request.query_params.get('instructor') else ''
         )
         try:
@@ -105,6 +127,24 @@ class LessonViewSet(ModelViewSet):
         
     def partial_update(self, request, *args, **kwargs):
         kwargs['partial'] = True
+        if 'instructor' in request.data.keys():
+            instructor = User.objects.get(id = request.data['instructor'])
+            lesson = Lesson.objects.get(id = kwargs['pk'])
+            lesson.instructor = instructor
+            lesson.save()
+        
+        if 'substances' in request.data.keys():
+            substances = request.data['substances']
+            lesson = Lesson.objects.get(id = kwargs['pk'])
+            lesson.substances.set(substances)
+            lesson.save()
+        
+        if 'tools' in request.data.keys():
+            tools = request.data['tools']
+            lesson = Lesson.objects.get(id = kwargs['pk'])
+            lesson.tools.set(tools)
+            lesson.save()
+        
         return self.update(request, *args, **kwargs)
     
 
