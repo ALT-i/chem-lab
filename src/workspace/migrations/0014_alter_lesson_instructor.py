@@ -17,7 +17,7 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name='lesson',
             name='instructor',
-            field=models.ForeignKey(blank=True, default='1768f29f-a9a1-427f-8145-0be7882af329', on_delete=django.db.models.deletion.CASCADE, to='users.user', validators=[src.workspace.models.validate_instructor]),
+            field=models.ForeignKey(blank=True, default='1697542f-f3ce-4f6f-927c-08936a2ee76a', on_delete=django.db.models.deletion.CASCADE, to='users.user', validators=[src.workspace.models.validate_instructor]),
             preserve_default=False,
         ),
     ]
