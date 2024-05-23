@@ -38,6 +38,7 @@ class UserSerializer(serializers.ModelSerializer):
         if ret['role'] == User.Roles.ADMIN: 
             for items in ['office', 'progress', 'level', 'department', 'matric_number']:
                 ret.pop(items)
+                    
         return ret
 
 
