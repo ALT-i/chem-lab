@@ -15,7 +15,7 @@ from drf_yasg import openapi
 from src.social.views import exchange_token, complete_twitter_login
 from src.files.urls import files_router
 from src.users.urls import users_router
-from src.users.views import RegisterViewSet
+from src.users.views import MyTokenObtainPairView
 from src.workbench.urls import workbench_router
 from src.workspace.urls import workspace_router
 
@@ -44,7 +44,7 @@ urlpatterns = [
     # auth
     path('api-auth/', include('rest_framework.urls', namespace='rest_framework')),
     # path('api/v1/register/', RegisterViewSet.as_view(), name='signup'),
-    path('api/v1/login/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('api/v1/login/', MyTokenObtainPairView.as_view(), name='token_obtain'),
     path('api/v1/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     # social login
     url('', include('social_django.urls', namespace='social')),

@@ -1,4 +1,7 @@
+import datetime
+
 from rest_framework import serializers
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 from src.users.models import User
 from src.common.serializers import ThumbnailerJSONSerializer
@@ -23,6 +26,8 @@ class UserSerializer(serializers.ModelSerializer):
             'phone',
             'role',
             'progress',
+            'is_active',
+            'date_joined',
         )
         read_only_fields = ('id', 'role', 'email')
         
@@ -47,7 +52,6 @@ class CreateUserSerializer(serializers.ModelSerializer):
     last_name = serializers.CharField(required=False, allow_blank=True)
     role = serializers.ChoiceField(choices=User.Roles, default=User.Roles.STUDENT)
     progress = serializers.ListField(child=serializers.IntegerField(), required=False, allow_empty=True)
-    image = serializers.CharField(required=False, allow_blank=True)
     tokens = serializers.SerializerMethodField()
 
     def get_tokens(self, user):
@@ -56,6 +60,9 @@ class CreateUserSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         # call create_user on user object. Without this
         # the password will be stored in plain text.
+        
+        # Keep all email addresses unique by converting them to lower case
+        validated_data['email'] = validated_data['email'].lower()  
         
         if validated_data['role'] == 'ADMIN':
             user = User.objects.create_superuser(**validated_data)
@@ -88,3 +95,15 @@ class CreateUserSerializer(serializers.ModelSerializer):
         )
         read_only_fields = ('tokens', 'role', )
         extra_kwargs = {'password': {'write_only': True}}
+
+
+class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
+    
+    @classmethod
+    def get_token(cls, user):
+        token = super().get_token(user)
+
+        # Add custom claims
+        token['role'] = user.role
+
+        return token

@@ -1,5 +1,6 @@
 import uuid
 import os
+import jwt
 from datetime import datetime
 from django.db import models
 from django.dispatch import receiver
@@ -15,6 +16,7 @@ from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ValidationError
 
 from src.common.helpers import build_absolute_uri
+from src.config.common import SECRET_KEY 
 from src.notifications.services import notify, ACTIVITY_USER_RESETS_PASS
 
 class CustomUserManager(BaseUserManager):
@@ -52,14 +54,12 @@ class CustomUserManager(BaseUserManager):
             raise ValueError(_('Superuser must have is_superuser=True.'))
         return self.create_user(email, password, **extra_fields)
 
+
     def create_instructor(self, email, password, **extra_fields):
         """
         Create and save an instructor with the given email and password.
         """
 
-        # email = self.normalize_email(email)
-        # user = self.model(email=email, **extra_fields)
-        # user.role = Roles.CUSTOMER)
         extra_fields.setdefault('is_staff', True)
         extra_fields.setdefault('is_superuser', False)
         extra_fields.setdefault('is_active', True)
@@ -84,10 +84,11 @@ def password_reset_token_created(sender, instance, reset_password_token, *args, 
     notify(ACTIVITY_USER_RESETS_PASS, context=context, email_to=[reset_password_token.user.email])
 
 def validate_image_file_extension(value):
-    ext = os.path.splitext(value)[1]  # [0] returns path & filename
-    valid_extensions = ['.svg', '.png', '.jpg', '.jpeg' ] # populate with the extensions that you allow / want
-    if not ext.lower() in valid_extensions:
-        raise ValidationError('Unsupported file extension.')
+    if (value):
+        ext = os.path.splitext(value)[1]  # [0] returns path & filename
+        valid_extensions = ['.svg', '.png', '.jpg', '.jpeg' ] # populate with the extensions that you allow / want
+        if not ext.lower() in valid_extensions:
+            raise ValidationError('Unsupported file extension.')
     
 class User(AbstractUser):
     class Roles(models.TextChoices):
@@ -99,7 +100,7 @@ class User(AbstractUser):
 
     username = None
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    image = models.CharField(default='default.png', blank=True, null=True, max_length=256, validators=[validate_image_file_extension])
+    image = models.CharField(blank=True, null=True, max_length=256, validators=[validate_image_file_extension])
     email = models.EmailField(max_length=254, unique=True)
     level = models.IntegerField(blank=True, null=True )
     phone = models.CharField(blank=True, null=True, max_length=250)
@@ -111,6 +112,7 @@ class User(AbstractUser):
     last_name = models.CharField(blank=True, null=True, max_length=250)
     role = models.CharField(max_length=50, choices=Roles.choices, default=Roles.STUDENT)
     email_confirmation = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True, null=True)
     date_joined = models.CharField(max_length=50, default=datetime.now(), null=True, blank=False)
     progress =  ArrayField(
         models.IntegerField(blank=True),
@@ -140,10 +142,16 @@ class User(AbstractUser):
 
     def get_tokens(self):
         refresh = RefreshToken.for_user(self)
+        decodeJTW = jwt.decode(str(refresh), SECRET_KEY, algorithms=["HS256"])
+        print(decodeJTW)
+        
+        decodeJTW['role'] = self.role
+        
+        # encode
+        encoded = jwt.encode(decodeJTW, SECRET_KEY, algorithm="HS256")
 
         return {
-            'refresh': str(refresh),
-            'access': str(refresh.access_token),
+            'refresh': str(encoded),
         }
 
     def __str__(self):
