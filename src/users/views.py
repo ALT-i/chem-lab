@@ -4,16 +4,38 @@ from rest_framework.permissions import AllowAny
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework_simplejwt.views import (
+    TokenObtainPairView,
+    TokenRefreshView,
+)
+
+from src.common.permissions import IsActiveUser
 from django.db.models import Q
 
 from src.users.models import User
 from src.users.permissions import IsUserOrReadOnly
-from src.users.serializers import CreateUserSerializer, UserSerializer
+from src.users.serializers import CreateUserSerializer, UserSerializer, MyTokenObtainPairSerializer
+
 
 # view for registering users
+class MyTokenObtainPairView(TokenObtainPairView):
+    serializer_class = MyTokenObtainPairSerializer
+    permission_classes = [IsActiveUser]
+    
+
 class RegisterViewSet(mixins.CreateModelMixin, viewsets.GenericViewSet):
     queryset = User.objects.all()
     serializer_class = CreateUserSerializer
+    
+    # def perform_create(self, serializer):
+    #     serializer.save()
+    
+    # def create(self, request, *args, **kwargs):
+    #     serializer = self.get_serializer(data=request.data)
+    #     serializer.is_valid(raise_exception=True)
+    #     self.perform_create(serializer)
+    #     headers = self.get_success_headers(serializer.data)
+    #     return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
     
 class UserViewSet(mixins.RetrieveModelMixin, mixins.UpdateModelMixin,  viewsets.GenericViewSet):
     """
@@ -21,8 +43,14 @@ class UserViewSet(mixins.RetrieveModelMixin, mixins.UpdateModelMixin,  viewsets.
     """
 
     queryset = User.objects.all().order_by('-date_joined')
-    serializers = {'default': UserSerializer, 'create_official': CreateUserSerializer } 
-    # permissions = {'default': (IsUserOrReadOnly,)}
+    serializers = {
+        'default': UserSerializer, 
+        'create_official': CreateUserSerializer 
+    } 
+    # permissions = {
+    #     # 'default': (IsUserOrReadOnly,),
+    #     # 'create_official': (IsAuthenticated)
+    # }
     filterset_fields = ['role']
 
     def get_queryset(self):                                      
@@ -60,15 +88,25 @@ class UserViewSet(mixins.RetrieveModelMixin, mixins.UpdateModelMixin,  viewsets.
             serializer.is_valid(raise_exception=True)
         except:
             return Response({"message": "Invalid data"}, status=status.HTTP_400_BAD_REQUEST)
+        
         self.perform_update(serializer)
         return Response({"message": "User updated successfully", "data": serializer.data}, status=status.HTTP_200_OK) 
     
     @action(detail=False, methods=['get'], url_path='me', url_name='me')
     def get_user_data(self, instance):
         try:
-            return Response(UserSerializer(self.request.user, context={'request': self.request}).data, status=status.HTTP_200_OK)
+            if not self.request.user.is_active:
+                raise Exception("This account has been deactivated, contact an Admin to re-activate")
+            user = UserSerializer(self.request.user, context={'request': self.request}).data
+            return Response(
+                {
+                    'message':'details retrieved successfully', 
+                    'data': user
+                }, 
+                status=status.HTTP_200_OK
+            )
         except Exception as e:
-            return Response({'error': 'Wrong auth token'}, status=status.HTTP_400_BAD_REQUEST) 
+            return Response({'error': 'Wrong auth', "message": f"{e}"}, status=status.HTTP_400_BAD_REQUEST) 
         
     def list(self, request): 
         queryset = self.get_queryset()
@@ -93,6 +131,7 @@ class UserViewSet(mixins.RetrieveModelMixin, mixins.UpdateModelMixin,  viewsets.
     def create_official(self, request):
         """For creating officials like instructors, admins and super-admins
         """
+        # request.user.is_authenticated
         serializer = self.get_serializer(data=request.data)
         try:
             serializer.is_valid(raise_exception=True)

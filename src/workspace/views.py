@@ -54,22 +54,23 @@ class LessonViewSet(ModelViewSet):
         
     def create(self, request, *args, **kwargs):
         # Regular logic going through the serializer
-        serializer = self.get_serializer(data=request.data)
-        try:
-          serializer.is_valid(raise_exception=True)
-        except Exception as e :
-          return Response({"message": e}, status=status.HTTP_400_BAD_REQUEST)
-        self.perform_create(serializer)
-        headers = self.get_success_headers(serializer.data)
+        # serializer = self.get_serializer(data=request.data)
+        # try:
+        #   serializer.is_valid(raise_exception=True)
+        # except Exception as e :
+        #   return Response({"message": e}, status=status.HTTP_400_BAD_REQUEST)
+        # self.perform_create(serializer)
+        # headers = self.get_success_headers(serializer.data)
         
-        # Removing tools and substance from payload to avoid complications
+        # Removing instructor, tools and substances from payload to avoid complications
         tools = request.data.pop('tools')    
-        substances = request.data.pop('substances')     
+        substances = request.data.pop('substances')
+           
         
         # Creating lesson 
         lesson = Lesson.objects.create(**request.data)
         
-        # Saving tools and substances to created lesson 
+        # Saving instructor, tools and substances to created lesson 
         lesson.tools.set(tools)
         lesson.substances.set(substances)
         lesson.save()

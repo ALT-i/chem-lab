@@ -22,11 +22,6 @@ class LessonSerializer(serializers.ModelSerializer):
     #     validated_data["instructor_id"] = validated_data["instructor_id"].id
     #     lesson = Lesson.objects.create(**validated_data)
     #     return lesson
-    
-    def partial_update(self, validated_data, **kwargs):
-        print(validated_data)
-        print(kwargs)
-        ...
 
 
 
