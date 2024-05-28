@@ -7,7 +7,10 @@ class IsActiveUser(permissions.BasePermission):
         users = User.objects.all()
         for user in users:
             print(user.email)
-            user.email = user.email.lower()
+            if User.objects.get(email = user.email.lower()):
+                pass
+            else:
+                user.email = user.email.lower()
+                user.save()
             print(user.email)
-            user.save()
         return not request.user.is_active
