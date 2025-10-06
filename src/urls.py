@@ -18,6 +18,7 @@ from src.users.urls import users_router
 from src.users.views import MyTokenObtainPairView
 from src.workbench.urls import workbench_router
 from src.workspace.urls import workspace_router
+from django.urls import include as django_include
 
 schema_view = get_schema_view(
     openapi.Info(title="Chem Lab API", default_version='v1'),
@@ -40,6 +41,7 @@ urlpatterns = [
     # api
     path('api/v1/', include(router.urls)),
     path('api/v1/', include('src.workspace.urls')),
+    # Moodle endpoints are inside src.workspace.urls under /moodle/*
     url(r'^api/v1/password_reset/', include('django_rest_passwordreset.urls', namespace='password_reset')),
     # auth
     path('api-auth/', include('rest_framework.urls', namespace='rest_framework')),

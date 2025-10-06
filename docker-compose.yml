@@ -4,6 +4,7 @@ services:
     image: postgres:14.2
     ports:
       - 5432:5432
+    env_file: .env
     environment:
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_USER: ${DB_USER}
@@ -20,11 +21,11 @@ services:
     ports:
       - 8001:8001
     env_file: .env
-    # command: 'sh -c "./manage.py migrate && ./manage.py runserver 0.0.0.0:8001"'
+    command: 'sh -c "./manage.py migrate && ./manage.py runserver 0.0.0.0:8001"'
     volumes:
       - ./:/app
-    depends_on:
-      - db
+    # depends_on:
+    #   - db
 
   # queue:
   #   build:

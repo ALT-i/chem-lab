@@ -7,6 +7,7 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from rest_framework import generics, status
+from rest_framework.views import APIView
 from chempy import Substance as chmSubstance
 from chempy import balance_stoichiometry, Reaction, Equilibrium
 from chempy.kinetics.ode import get_odesys
@@ -17,6 +18,8 @@ from chempy.util import pyutil  # For simplifying the output
 
 from .models import *
 from .serializers import *
+from src.common.moodle_client import MoodleClient
+from src.users.permissions import IsInstructorOrAdmin
 
 # Create your views here.
 
@@ -230,6 +233,102 @@ class ReactionViewSet(ModelViewSet):
 
 
 
+# Moodle integration endpoints
+
+class MoodleStudentsView(APIView):
+    permission_classes = [IsAuthenticated, IsInstructorOrAdmin]
+
+    def get(self, request, *args, **kwargs):
+        course_id = request.query_params.get('course_id')
+        if not course_id:
+            return Response({'detail': 'course_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            course_int = int(course_id)
+        except ValueError:
+            return Response({'detail': 'course_id must be an integer'}, status=status.HTTP_400_BAD_REQUEST)
+        client = MoodleClient()
+        users = client.get_enrolled_users(course_int)
+        return Response(users, status=status.HTTP_200_OK)
+
+
+class MoodleUserProfileView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        email = request.query_params.get('email')
+        if not email:
+            return Response({'detail': 'email is required'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            client = MoodleClient()
+            users = client.get_users_by_email([email])
+            if not users or len(users) == 0:
+                return Response({
+                    'detail': f'User not found in Moodle with email: {email}',
+                    'searched_email': email
+                }, status=status.HTTP_404_NOT_FOUND)
+            return Response(users[0], status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({
+                'detail': f'Error fetching from Moodle: {str(e)}',
+                'searched_email': email
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class MoodleAssignmentGradesView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        data = request.data or {}
+        course_id = data.get('course_id')
+        assignment_id = data.get('assignment_id')
+        grades = data.get('grades') or []
+        if course_id is None or assignment_id is None:
+            return Response({'detail': 'course_id and assignment_id are required'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            course_int = int(course_id)
+            assignment_int = int(assignment_id)
+        except ValueError:
+            return Response({'detail': 'course_id and assignment_id must be integers'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not isinstance(grades, list) or len(grades) == 0:
+            return Response({'detail': 'grades must be a non-empty list'}, status=status.HTTP_400_BAD_REQUEST)
+
+        client = MoodleClient()
+        enrolled = client.get_enrolled_users(course_int)
+        enrolled_by_email = {u.get('email'): u for u in enrolled if u.get('email')}
+
+        results = []
+        for entry in grades:
+            email = (entry or {}).get('email')
+            grade_value = (entry or {}).get('grade')
+            feedback = (entry or {}).get('feedback')
+            if not email or grade_value is None:
+                results.append({'email': email, 'status': 'error', 'detail': 'email and grade are required'})
+                continue
+            if email not in enrolled_by_email:
+                users = client.get_users_by_email([email])
+                user = users[0] if users else None
+                if not user:
+                    results.append({'email': email, 'status': 'error', 'detail': 'user not found'})
+                    continue
+                user_id = user.get('id')
+            else:
+                user_id = enrolled_by_email[email].get('id')
+
+            try:
+                client.save_assignment_grade(assignment_int, int(user_id), float(grade_value), feedback)
+                results.append({'email': email, 'status': 'ok', 'user_id': user_id})
+            except Exception as exc:
+                results.append({
+                    'email': email,
+                    'status': 'error',
+                    'detail': str(exc),
+                    'user_id': user_id,
+                    'assignment_id': assignment_int,
+                    'grade': grade_value
+                })
+
+        return Response({'results': results}, status=status.HTTP_200_OK)
 # class TitrationExperimentViewSet(ModelViewSet):
 #     # ...
 
