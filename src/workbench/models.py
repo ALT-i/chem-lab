@@ -24,8 +24,8 @@ class Substance(models.Model):
     name = models.CharField(blank=True, max_length=250)
     image = models.CharField(default='default.svg', blank=True, null=True, max_length=256, validators=[validate_file_extension])
     formula = models.CharField(blank=True, max_length=250)
-    volume = models.IntegerField(blank=True, null=True)
-    phValue = models.IntegerField(blank=True, null=True)
+    volume = models.FloatField(blank=True, null=True)
+    phValue = models.FloatField(blank=True, null=True)
     molarity = models.FloatField(blank=True, null=True)
     thermal_properties = models.TextField(max_length=256, blank=True, null=True)
 
