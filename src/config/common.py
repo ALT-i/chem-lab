@@ -359,3 +359,13 @@ SUMMERNOTE_CONFIG = {
 }
 
 DEFAULT_AUTO_FIELD = 'django.db.models.AutoField'
+
+# Moodle integration
+# Base URL like: https://your-site.moodlecloud.com
+MOODLE_BASE_URL = os.getenv('MOODLE_BASE_URL', '')
+# Web service token created for the external service
+MOODLE_TOKEN = os.getenv('MOODLE_TOKEN', '')
+# Course ID for CHM 191
+MOODLE_COURSE_ID = int(os.getenv('MOODLE_COURSE_ID', '9'))
+# Default assignment ID (can be overridden per experiment)
+MOODLE_DEFAULT_ASSIGNMENT_ID = int(os.getenv('MOODLE_DEFAULT_ASSIGNMENT_ID', '1'))

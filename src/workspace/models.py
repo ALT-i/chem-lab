@@ -41,6 +41,7 @@ class Lesson(models.Model):
     substances = models.ManyToManyField(Substance)
     parameters = models.CharField(blank=True, max_length=250, default="cm3")
     procedure = models.JSONField(null=True, default=dict)
+    moodle_assignment_id = models.IntegerField(blank=True, null=True, help_text="Moodle assignment ID for grade submission")
 
     def __unicode__(self):
         return u'%s' % self.title

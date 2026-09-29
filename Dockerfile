@@ -1,5 +1,5 @@
 # pull official base image
-FROM python:3.9-buster
+FROM python:3.9-bullseye
 
 ARG REQUIREMENTS_FILE
 
@@ -9,8 +9,13 @@ ENV PYTHONUNBUFFERED 1
 
 RUN set -x && \
 	apt-get update && \
-	apt -f install	&& \
-	apt-get -qy install netcat && \
+	apt-get install -y wget gnupg2 lsb-release && \
+	wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add - && \
+	echo "deb http://apt.postgresql.org/pub/repos/apt/ $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list && \
+	apt-get update && \
+	apt-get install -y libpq-dev postgresql-client && \
+	apt -f install && \
+	apt-get -qy install netcat-openbsd && \
 	rm -rf /var/lib/apt/lists/* && \
 	wget -O /wait-for https://raw.githubusercontent.com/eficode/wait-for/master/wait-for && \
 	chmod +x /wait-for
