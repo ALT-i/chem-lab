@@ -6,6 +6,8 @@ from .views import *
 workspace_router = SimpleRouter()
 
 workspace_router.register(r'workspace/lessons', LessonViewSet)
+workspace_router.register(r'workspace/sessions', LessonSessionViewSet)
+workspace_router.register(r'workspace/lesson-sessions', LessonSessionViewSet)
 
 urlpatterns = [
     # Moodle endpoints

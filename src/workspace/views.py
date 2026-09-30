@@ -1,9 +1,8 @@
-import random
 from django.shortcuts import render
 
 from rest_framework.viewsets import ModelViewSet
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, action
 from rest_framework.response import Response
 
 from rest_framework import generics, status
@@ -12,6 +11,7 @@ from rest_framework.views import APIView
 
 from .models import *
 from .serializers import *
+from .grading import calculate_session_grade, evaluate_measurement_step
 from src.common.moodle_client import MoodleClient
 from src.users.permissions import IsInstructorOrAdmin
 
@@ -198,6 +198,19 @@ class MoodleAssignmentGradesView(APIView):
             email = (entry or {}).get('email')
             grade_value = (entry or {}).get('grade')
             feedback = (entry or {}).get('feedback')
+            session_id = (entry or {}).get('session_id')
+
+            # Dynamic grading evaluation from session if grade is not explicitly given or if session_id passed
+            if grade_value is None and session_id:
+                try:
+                    session = LessonSession.objects.get(id=session_id)
+                    eval_res = calculate_session_grade(session.measurements or {})
+                    grade_value = eval_res['overall_grade']
+                    if not feedback:
+                        feedback = eval_res['feedback']
+                except Exception:
+                    pass
+
             if not email or grade_value is None:
                 results.append({'email': email, 'status': 'error', 'detail': 'email and grade are required'})
                 continue
@@ -213,7 +226,7 @@ class MoodleAssignmentGradesView(APIView):
 
             try:
                 client.save_assignment_grade(assignment_int, int(user_id), float(grade_value), feedback)
-                results.append({'email': email, 'status': 'ok', 'user_id': user_id})
+                results.append({'email': email, 'status': 'ok', 'user_id': user_id, 'grade': grade_value})
             except Exception as exc:
                 results.append({
                     'email': email,
@@ -225,48 +238,43 @@ class MoodleAssignmentGradesView(APIView):
                 })
 
         return Response({'results': results}, status=status.HTTP_200_OK)
-# class TitrationExperimentViewSet(ModelViewSet):
-#     # ...
 
-#     @action(detail=True, methods=['post'])
-#     def simulate_titration(self, request, pk=None):
-#         experiment = self.get_object()
 
-#         # Extract parameters from the request
-#         initial_solution_volume = request.data.get('initial_solution_volume', 50)  # Initial volume in the flask
-#         titrant_concentration = request.data.get('titrant_concentration', 0.1)  # Titrant concentration (mol/L)
+class LessonSessionViewSet(ModelViewSet):
+    """
+    CRUD operations on LessonSession objects with student telemetry persistence
+    and dynamic accuracy/precision grading evaluation.
+    """
+    queryset = LessonSession.objects.all().select_related('lesson', 'student')
+    serializer_class = LessonSessionSerializer
 
-#         # Simulate errors and variations in initial solution concentration
-#         initial_solution_concentration = random.uniform(0.9, 1.1) * experiment.initial_solution_concentration
+    def get_queryset(self):
+        user = self.request.user
+        qs = super().get_queryset()
+        lesson_id = self.request.query_params.get('lesson')
+        if lesson_id:
+            qs = qs.filter(lesson_id=lesson_id)
+        student_id = self.request.query_params.get('student')
+        if student_id:
+            qs = qs.filter(student_id=student_id)
+        return qs
 
-#         # Simulate the addition of titrant in random increments
-#         total_titrant_volume = 0
-#         while total_titrant_volume < initial_solution_volume:
-#             titrant_increment = random.uniform(0.5, 2.0)  # Random volume increment added in each step
-#             total_titrant_volume += titrant_increment
+    def perform_create(self, serializer):
+        user = self.request.user
+        if 'student' not in serializer.validated_data and user.is_authenticated:
+            serializer.save(student=user)
+        else:
+            serializer.save()
 
-#             # Check if the reaction is complete (e.g., by reaching an equivalence point)
-#             # Simulate reaction completion with a certain probability
-#             reaction_complete = random.uniform(0, 1) < 0.1  # 10% chance of completion in each step
-
-#             if reaction_complete:
-#                 break
-
-#         # Calculate the resulting solution concentration after titration
-#         final_solution_volume = initial_solution_volume + total_titrant_volume
-#         final_solution_concentration = (titrant_concentration * total_titrant_volume) / final_solution_volume
-
-#         # Update experiment data
-#         experiment.initial_solution_volume = initial_solution_volume
-#         experiment.titrant_concentration = titrant_concentration
-#         experiment.initial_solution_concentration = initial_solution_concentration
-#         experiment.total_titrant_volume = total_titrant_volume
-#         experiment.final_solution_volume = final_solution_volume
-#         experiment.final_solution_concentration = final_solution_concentration
-
-#         experiment.save()
-
-#         return Response({
-#             'status': 'Titration simulation completed',
-#             'final_solution_concentration': final_solution_concentration
-#         })
+    @action(detail=True, methods=['get', 'post'], url_path='evaluate-grade')
+    def evaluate_grade(self, request, pk=None):
+        session = self.get_object()
+        if request.method == 'POST' and 'measurements' in request.data:
+            session.measurements = request.data['measurements']
+            session.save(update_fields=['measurements'])
+        evaluation = calculate_session_grade(session.measurements or {})
+        return Response({
+            'status': 'ok',
+            'session_id': str(session.id),
+            'evaluation': evaluation,
+        }, status=status.HTTP_200_OK)
