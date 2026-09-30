@@ -40,6 +40,7 @@ urlpatterns = [
     path('summernote/', include('django_summernote.urls')),
     # api
     path('api/v1/', include(router.urls)),
+    path('api/v1/', include('src.workbench.urls')),
     path('api/v1/', include('src.workspace.urls')),
     # Moodle endpoints are inside src.workspace.urls under /moodle/*
     url(r'^api/v1/password_reset/', include('django_rest_passwordreset.urls', namespace='password_reset')),
