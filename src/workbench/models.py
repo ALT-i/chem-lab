@@ -55,6 +55,7 @@ class Apparatus(models.Model):
     category = models.CharField(max_length=50, choices=Category.choices, default=Category.GLASSWARE)
     material = models.CharField(max_length=50, choices=Material.choices, default=Material.GLASS)
     volume = models.IntegerField(blank=True, null=True)
+    precision = models.FloatField(blank=True, null=True)
     thermal_properties = models.TextField(max_length=256, blank=True, null=True)
 
     def __unicode__(self):
