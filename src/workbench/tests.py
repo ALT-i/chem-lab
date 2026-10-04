@@ -58,7 +58,7 @@ class LessonPayloadTests(TestCase):
         self.lesson.substances.add(
             Substance.objects.create(name='Buffer', phValue=7.4, volume=12.5, molarity=0.1, thermal_properties='Stable')
         )
-        self.lesson.tools.add(Apparatus.objects.create(name='250 mL Beaker', volume=250))
+        self.lesson.tools.add(Apparatus.objects.create(name='50 mL Burette', volume=50, precision=0.05))
 
     def test_lesson_includes_substance_properties(self):
         response = APIClient().get(f'/api/v1/workspace/lessons/{self.lesson.id}/')
@@ -69,7 +69,39 @@ class LessonPayloadTests(TestCase):
         self.assertEqual(substance['molarity'], 0.1)
         self.assertEqual(substance['thermal_properties'], 'Stable')
 
-    def test_lesson_includes_apparatus_capacity(self):
+    def test_lesson_includes_apparatus_capacity_and_precision(self):
         response = APIClient().get(f'/api/v1/workspace/lessons/{self.lesson.id}/')
 
-        self.assertEqual(response.data['data']['tools'][0]['volume'], 250)
+        tool = response.data['data']['tools'][0]
+        self.assertEqual(tool['volume'], 50)
+        self.assertEqual(tool['precision'], 0.05)
+
+
+class ApparatusPrecisionTests(TestCase):
+    """precision must hold fractional values (e.g. burette ±0.05 mL, cylinder ±0.5 mL, beaker ±5 mL)."""
+
+    def setUp(self):
+        self.client = APIClient()
+
+    def test_create_apparatus_with_precision(self):
+        response = self.client.post(
+            '/api/v1/workbench/apparatus/',
+            {'name': '50 mL Burette', 'volume': 50, 'precision': 0.05, 'material': 'GLASS', 'category': 'GLASSWARE'},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data['data']['precision'], 0.05)
+
+    def test_apparatus_precision_database_round_trip(self):
+        apparatus = Apparatus.objects.create(name='Measuring Cylinder', volume=10, precision=0.5)
+        apparatus.refresh_from_db()
+
+        self.assertEqual(apparatus.precision, 0.5)
+
+    def test_apparatus_precision_is_optional(self):
+        apparatus = Apparatus.objects.create(name='Test Tube', volume=20)
+        apparatus.refresh_from_db()
+
+        self.assertIsNone(apparatus.precision)
+
