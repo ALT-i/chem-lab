@@ -105,3 +105,85 @@ class ApparatusPrecisionTests(TestCase):
 
         self.assertIsNone(apparatus.precision)
 
+
+class ReactionEngineTests(TestCase):
+    """Tier 2: Reaction Realism unit and API endpoint tests."""
+
+    def test_neutralization_excess_acid(self):
+        client = APIClient()
+        payload = {
+            'reactants': [
+                {'formula': 'HCl', 'volume': 25.0, 'molarity': 0.1},
+                {'formula': 'NaOH', 'volume': 20.0, 'molarity': 0.1}
+            ],
+            'products': ['NaCl', 'H2O'],
+            'reaction_type': 'neutralization'
+        }
+        res = client.post('/api/v1/workbench/calculate-reaction/', payload, format='json')
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+
+        self.assertEqual(data['limiting_reagent'], 'NaOH')
+        self.assertAlmostEqual(data['final_ph'], 1.95, places=1)
+        self.assertEqual(data['total_volume'], 45.0)
+
+        # Check product yield
+        nacl_yield = next(item for item in data['yield'] if item['formula'] == 'NaCl')
+        self.assertAlmostEqual(nacl_yield['theoretical_moles'], 0.002, places=4)
+        self.assertGreater(nacl_yield['mass_g'], 0.1)
+
+    def test_neutralization_equivalence_point(self):
+        client = APIClient()
+        payload = {
+            'reactants': [
+                {'formula': 'HCl', 'volume': 25.0, 'molarity': 0.1},
+                {'formula': 'NaOH', 'volume': 25.0, 'molarity': 0.1}
+            ],
+            'products': ['NaCl', 'H2O'],
+            'reaction_type': 'neutralization'
+        }
+        res = client.post('/api/v1/workbench/calculate-reaction/', payload, format='json')
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertEqual(data['limiting_reagent'], 'Equimolar / None')
+        self.assertAlmostEqual(data['final_ph'], 7.0, places=1)
+
+    def test_neutralization_excess_base(self):
+        client = APIClient()
+        payload = {
+            'reactants': [
+                {'formula': 'HCl', 'volume': 20.0, 'molarity': 0.1},
+                {'formula': 'NaOH', 'volume': 25.0, 'molarity': 0.1}
+            ],
+            'products': ['NaCl', 'H2O'],
+            'reaction_type': 'neutralization'
+        }
+        res = client.post('/api/v1/workbench/calculate-reaction/', payload, format='json')
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertEqual(data['limiting_reagent'], 'HCl')
+        self.assertGreater(data['final_ph'], 11.5)
+
+    def test_precipitation_reaction(self):
+        client = APIClient()
+        payload = {
+            'reactants': [
+                {'formula': 'AgNO3', 'volume': 10.0, 'molarity': 0.1},
+                {'formula': 'NaCl', 'volume': 10.0, 'molarity': 0.1}
+            ],
+            'products': ['AgCl', 'NaNO3'],
+            'reaction_type': 'precipitation'
+        }
+        res = client.post('/api/v1/workbench/calculate-reaction/', payload, format='json')
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        agcl_yield = next(item for item in data['yield'] if item['formula'] == 'AgCl')
+        self.assertAlmostEqual(agcl_yield['theoretical_moles'], 0.001, places=4)
+        self.assertGreater(agcl_yield['mass_g'], 0.14)
+
+    def test_invalid_reaction_payload(self):
+        client = APIClient()
+        # Empty reactants
+        res = client.post('/api/v1/workbench/calculate-reaction/', {'reactants': [], 'products': []}, format='json')
+        self.assertEqual(res.status_code, 400)
+
