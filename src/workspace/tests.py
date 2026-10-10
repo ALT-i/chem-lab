@@ -75,6 +75,7 @@ class LessonSessionAPITests(TestCase):
         )
 
     def test_create_and_retrieve_session_with_measurements(self):
+        self.client.force_authenticate(user=self.student)
         payload = {
             'lesson': self.lesson.id,
             'student': self.student.id,
@@ -98,6 +99,7 @@ class LessonSessionAPITests(TestCase):
         self.assertGreaterEqual(get_res.data['grade_evaluation']['overall_grade'], 90.0)
 
     def test_evaluate_grade_endpoint(self):
+        self.client.force_authenticate(user=self.student)
         session = LessonSession.objects.create(
             lesson=self.lesson,
             student=self.student,
@@ -124,6 +126,135 @@ class LessonSessionAPITests(TestCase):
         )
         self.assertEqual(update_res.status_code, 200)
         self.assertEqual(update_res.data['evaluation']['overall_grade'], 100.0)
+
+
+class LessonSessionAccessControlTests(TestCase):
+    """Regression tests for the session access-control fix.
+
+    Before this fix LessonSessionViewSet declared no permission_classes and
+    DEFAULT_PERMISSION_CLASSES is not set, so every one of these operations
+    was possible unauthenticated.
+    """
+
+    def setUp(self):
+        self.client = APIClient()
+        self.instructor = User.objects.create_instructor(
+            email='instructor@example.com', password='pass', role=User.Roles.INSTRUCTOR
+        )
+        self.student = User.objects.create_user(
+            email='owner@example.com', password='pass', role=User.Roles.STUDENT
+        )
+        self.other = User.objects.create_user(
+            email='other@example.com', password='pass', role=User.Roles.STUDENT
+        )
+        self.lesson = Lesson.objects.create(
+            title='Volumetric Analysis', description='x', instructor=self.instructor
+        )
+        self.session = LessonSession.objects.create(
+            lesson=self.lesson,
+            student=self.student,
+            measurements={'measurements': [
+                {'stepIndex': 0, 'targetVolume': 25.0, 'measuredVolume': 24.8,
+                 'precision': 0.05, 'tolerance': 0.5}
+            ]},
+        )
+
+    def test_anonymous_cannot_list_or_read_sessions(self):
+        self.assertIn(self.client.get('/api/v1/workspace/sessions/').status_code, (401, 403))
+        self.assertIn(
+            self.client.get(f'/api/v1/workspace/sessions/{self.session.id}/').status_code,
+            (401, 403),
+        )
+
+    def test_anonymous_cannot_overwrite_measurements_via_evaluate_grade(self):
+        res = self.client.post(
+            f'/api/v1/workspace/sessions/{self.session.id}/evaluate-grade/',
+            {'measurements': [{'stepIndex': 0, 'targetVolume': 25.0, 'measuredVolume': 25.0,
+                               'precision': 0.05, 'tolerance': 0.1}]},
+            format='json',
+        )
+        self.assertIn(res.status_code, (401, 403))
+        self.session.refresh_from_db()
+        self.assertEqual(self.session.measurements['measurements'][0]['measuredVolume'], 24.8)
+
+    def test_student_only_sees_own_sessions(self):
+        self.client.force_authenticate(user=self.other)
+        res = self.client.get('/api/v1/workspace/sessions/')
+        self.assertEqual(res.status_code, 200)
+        returned = res.data['data'] if isinstance(res.data, dict) and 'data' in res.data else res.data
+        results = returned['results'] if isinstance(returned, dict) and 'results' in returned else returned
+        self.assertEqual([r for r in results if str(r['id']) == str(self.session.id)], [])
+
+    def test_student_cannot_read_another_students_session(self):
+        self.client.force_authenticate(user=self.other)
+        res = self.client.get(f'/api/v1/workspace/sessions/{self.session.id}/')
+        self.assertIn(res.status_code, (403, 404))
+
+    def test_student_cannot_tamper_with_another_students_grade(self):
+        self.client.force_authenticate(user=self.other)
+        res = self.client.post(
+            f'/api/v1/workspace/sessions/{self.session.id}/evaluate-grade/',
+            {'measurements': [{'stepIndex': 0, 'targetVolume': 25.0, 'measuredVolume': 25.0,
+                               'precision': 0.05, 'tolerance': 0.1}]},
+            format='json',
+        )
+        self.assertIn(res.status_code, (403, 404))
+        self.session.refresh_from_db()
+        self.assertEqual(self.session.measurements['measurements'][0]['measuredVolume'], 24.8)
+
+    def test_student_cannot_forge_session_attribution(self):
+        """Posting someone else's id must still bind the session to the caller."""
+        self.client.force_authenticate(user=self.other)
+        res = self.client.post(
+            '/api/v1/workspace/sessions/',
+            {'lesson': self.lesson.id, 'student': str(self.student.id), 'measurements': {}},
+            format='json',
+        )
+        self.assertEqual(res.status_code, 201, res.data)
+        created = LessonSession.objects.get(id=res.data['id'])
+        self.assertEqual(created.student_id, self.other.id)
+
+    def test_instructor_can_read_any_session(self):
+        self.client.force_authenticate(user=self.instructor)
+        res = self.client.get(f'/api/v1/workspace/sessions/{self.session.id}/')
+        self.assertEqual(res.status_code, 200)
+
+
+class CatalogueWritePermissionTests(TestCase):
+    """Reads stay open for released desktop clients; writes are staff-only."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.instructor = User.objects.create_instructor(
+            email='instructor@example.com', password='pass', role=User.Roles.INSTRUCTOR
+        )
+        self.student = User.objects.create_user(
+            email='student@example.com', password='pass', role=User.Roles.STUDENT
+        )
+        self.lesson = Lesson.objects.create(
+            title='Keep Me', description='x', instructor=self.instructor
+        )
+
+    def test_anonymous_can_still_read_lessons(self):
+        # Released clients call this with no Authorization header.
+        self.assertEqual(self.client.get('/api/v1/workspace/lessons/').status_code, 200)
+
+    def test_anonymous_cannot_delete_a_lesson(self):
+        res = self.client.delete(f'/api/v1/workspace/lessons/{self.lesson.id}/')
+        self.assertIn(res.status_code, (401, 403))
+        self.assertTrue(Lesson.objects.filter(id=self.lesson.id).exists())
+
+    def test_student_cannot_delete_a_lesson(self):
+        self.client.force_authenticate(user=self.student)
+        res = self.client.delete(f'/api/v1/workspace/lessons/{self.lesson.id}/')
+        self.assertIn(res.status_code, (401, 403))
+        self.assertTrue(Lesson.objects.filter(id=self.lesson.id).exists())
+
+    def test_anonymous_cannot_write_substances(self):
+        res = self.client.post(
+            '/api/v1/workbench/substance/', {'name': 'Injected', 'formula': 'XX'}, format='json'
+        )
+        self.assertIn(res.status_code, (401, 403))
 
 
 class DynamicGradingTests(TestCase):

@@ -11,6 +11,7 @@ from rest_framework.views import APIView
 
 from .models import *
 from .serializers import *
+from src.users.permissions import IsInstructorOrAdminOrReadOnly
 from .reaction_engine import calculate_reaction
 
 
@@ -22,6 +23,7 @@ class SubstanceViewSet(ModelViewSet):
     """
     queryset  = Substance.objects.all().order_by('id')
     serializer_class =  SubstanceSerializer
+    permission_classes = [IsInstructorOrAdminOrReadOnly]
 
     def get_queryset(self):                                      
         return super().get_queryset()
@@ -91,6 +93,7 @@ class ApparatusViewSet(ModelViewSet):
     """
     queryset  = Apparatus.objects.all().order_by('id')
     serializer_class =  ApparatusSerializer
+    permission_classes = [IsInstructorOrAdminOrReadOnly]
     filterset_fields = ['type', 'category', 'material']
 
     def get_queryset(self):                                      

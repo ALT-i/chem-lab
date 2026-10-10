@@ -13,7 +13,12 @@ from .models import *
 from .serializers import *
 from .grading import calculate_session_grade, evaluate_measurement_step
 from src.common.moodle_client import MoodleClient
-from src.users.permissions import IsInstructorOrAdmin
+from src.users.permissions import (
+    IsInstructorOrAdmin,
+    IsInstructorOrAdminOrReadOnly,
+    IsSessionOwnerOrStaff,
+    is_staff_user,
+)
 
 # Create your views here.
 
@@ -23,6 +28,7 @@ class LessonViewSet(ModelViewSet):
     """
     queryset  = Lesson.objects.all()
     serializer_class =  LessonSerializer
+    permission_classes = [IsInstructorOrAdminOrReadOnly]
     # filterset_fields = ['title']
 
     def get_queryset(self):                                      
@@ -247,10 +253,14 @@ class LessonSessionViewSet(ModelViewSet):
     """
     queryset = LessonSession.objects.all().select_related('lesson', 'student')
     serializer_class = LessonSessionSerializer
+    permission_classes = [IsAuthenticated, IsSessionOwnerOrStaff]
 
     def get_queryset(self):
         user = self.request.user
         qs = super().get_queryset()
+        # Students only ever see their own sessions; staff may see all.
+        if not is_staff_user(user):
+            qs = qs.filter(student=user)
         lesson_id = self.request.query_params.get('lesson')
         if lesson_id:
             qs = qs.filter(lesson_id=lesson_id)
@@ -261,13 +271,26 @@ class LessonSessionViewSet(ModelViewSet):
 
     def perform_create(self, serializer):
         user = self.request.user
-        if 'student' not in serializer.validated_data and user.is_authenticated:
-            serializer.save(student=user)
-        else:
+        # Only staff may attribute a session to someone else; a student's
+        # session is always bound to the caller regardless of payload.
+        if is_staff_user(user) and serializer.validated_data.get('student'):
             serializer.save()
+        else:
+            serializer.save(student=user)
+
+    def perform_update(self, serializer):
+        user = self.request.user
+        # A student may not hand their session to, or steal one from,
+        # another account by PATCHing `student`.
+        if is_staff_user(user):
+            serializer.save()
+        else:
+            serializer.save(student=user)
 
     @action(detail=True, methods=['get', 'post'], url_path='evaluate-grade')
     def evaluate_grade(self, request, pk=None):
+        # get_object() runs has_object_permission, so a student can only
+        # reach their own session here.
         session = self.get_object()
         if request.method == 'POST' and 'measurements' in request.data:
             session.measurements = request.data['measurements']
