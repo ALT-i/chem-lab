@@ -5,13 +5,15 @@ from django.shortcuts import render
 
 from rest_framework import status
 from rest_framework.viewsets import ModelViewSet
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
-
-from chempy import balance_stoichiometry
+from rest_framework.views import APIView
 
 from .models import *
 from .serializers import *
+from src.users.permissions import IsInstructorOrAdminOrReadOnly
+from .reaction_engine import calculate_reaction
+
 
 
 # Create your views here.
@@ -21,6 +23,7 @@ class SubstanceViewSet(ModelViewSet):
     """
     queryset  = Substance.objects.all().order_by('id')
     serializer_class =  SubstanceSerializer
+    permission_classes = [IsInstructorOrAdminOrReadOnly]
 
     def get_queryset(self):                                      
         return super().get_queryset()
@@ -90,6 +93,7 @@ class ApparatusViewSet(ModelViewSet):
     """
     queryset  = Apparatus.objects.all().order_by('id')
     serializer_class =  ApparatusSerializer
+    permission_classes = [IsInstructorOrAdminOrReadOnly]
     filterset_fields = ['type', 'category', 'material']
 
     def get_queryset(self):                                      
@@ -157,3 +161,27 @@ class ApparatusViewSet(ModelViewSet):
     def partial_update(self, request, *args, **kwargs):
         kwargs['partial'] = True
         return self.update(request, *args, **kwargs)
+
+
+class CalculateReactionView(APIView):
+    """
+    Tier 2 Reaction Realism:
+    Balances reaction stoichiometry using chempy, computes limiting reagents,
+    product yields, remaining excess reactants, and resulting final pH.
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        serializer = ReactionCalculationSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            result = calculate_reaction(
+                reactants=serializer.validated_data['reactants'],
+                products=serializer.validated_data['products'],
+                reaction_type=serializer.validated_data.get('reaction_type', 'neutralization'),
+            )
+            return Response(result, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)

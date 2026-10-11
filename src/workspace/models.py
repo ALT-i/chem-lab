@@ -1,4 +1,5 @@
 import os
+import uuid
 from django.db import models
 from django.contrib.postgres.fields import ArrayField
 from src.users.models import User
@@ -50,15 +51,16 @@ class Lesson(models.Model):
         return f"{self.title}"
 
 class LessonSession(models.Model):
-    id = models.UUIDField(primary_key=True, verbose_name='session_id')
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, verbose_name='session_id')
     lesson = models.ForeignKey('Lesson', related_name='sessions', on_delete=models.CASCADE)
-    student = models.ForeignKey(User, related_name='student',on_delete=models.CASCADE)
+    student = models.ForeignKey(User, related_name='student', on_delete=models.CASCADE)
+    measurements = models.JSONField(default=dict, blank=True, null=True, help_text="Student telemetry and measurement data")
 
     def __unicode__(self):
-        return u'%s' % self.title
+        return u'%s - %s' % (self.lesson.title, self.student.email)
     
     def __str__(self):
-        return f"{self.title}"
+        return f"{self.lesson.title} - {self.student.email}"
     
 
 class Reaction(models.Model):
@@ -68,14 +70,6 @@ class Reaction(models.Model):
     def __str__(self):
         return f"{self.substance} - {self.volume} mL"
     
-
-class TitrationExperiment(models.Model):
-    initial_solution_volume = models.FloatField()
-    titrant_concentration = models.FloatField()
-    initial_solution_concentration = models.FloatField()
-    total_titrant_volume = models.FloatField(null=True, blank=True)
-    final_solution_volume = models.FloatField(null=True, blank=True)
-    final_solution_concentration = models.FloatField(null=True, blank=True)
 
 class Exercise(models.Model):
     lesson = models.ForeignKey(Lesson, related_name='exercises', on_delete=models.CASCADE)
