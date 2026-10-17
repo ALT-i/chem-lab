@@ -11,6 +11,12 @@ class SubstancePrecisionTests(TestCase):
 
     def setUp(self):
         self.client = APIClient()
+        # Creating apparatus/substances is an instructor action; reads stay
+        # open for released desktop clients but writes require staff.
+        self.staff = User.objects.create_instructor(
+            email=f'staff.{self.id()}@example.com', password='p', role=User.Roles.INSTRUCTOR
+        )
+        self.client.force_authenticate(user=self.staff)
 
     def test_create_substance_with_fractional_ph_and_volume(self):
         response = self.client.post(
@@ -82,6 +88,12 @@ class ApparatusPrecisionTests(TestCase):
 
     def setUp(self):
         self.client = APIClient()
+        # Creating apparatus/substances is an instructor action; reads stay
+        # open for released desktop clients but writes require staff.
+        self.staff = User.objects.create_instructor(
+            email=f'staff.{self.id()}@example.com', password='p', role=User.Roles.INSTRUCTOR
+        )
+        self.client.force_authenticate(user=self.staff)
 
     def test_create_apparatus_with_precision(self):
         response = self.client.post(

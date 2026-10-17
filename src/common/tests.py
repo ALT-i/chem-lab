@@ -70,7 +70,7 @@ class MoodleSettingsResolutionTests(TestCase):
         c = MoodleConfiguration.load()
         c.base_url, c.token = 'https://gone.moodlecloud.com', 'tok'
         c.save()
-        fake = mock.Mock(status_code=200)
+        fake = mock.Mock(status_code=200, is_redirect=False)
         fake.json.side_effect = ValueError('not json')
         with mock.patch('src.common.moodle_client.requests.post', return_value=fake):
             with self.assertRaises(MoodleError) as ctx:
@@ -143,7 +143,7 @@ class MoodleConfigurationAPITests(TestCase):
             {'base_url': 'https://noun.moodlecloud.com', 'token': 'tok'},
             format='json',
         )
-        fake = mock.Mock(status_code=200)
+        fake = mock.Mock(status_code=200, is_redirect=False)
         fake.json.return_value = {'sitename': 'NOUN', 'username': 'svc', 'release': '4.3'}
         with mock.patch('src.common.moodle_client.requests.post', return_value=fake):
             res = self.client.post('/api/v1/moodle/config/test/', {}, format='json')
@@ -159,7 +159,7 @@ class MoodleConfigurationAPITests(TestCase):
             {'base_url': 'https://noun.moodlecloud.com', 'token': 'bad'},
             format='json',
         )
-        fake = mock.Mock(status_code=403)
+        fake = mock.Mock(status_code=403, is_redirect=False)
         with mock.patch('src.common.moodle_client.requests.post', return_value=fake):
             res = self.client.post('/api/v1/moodle/config/test/', {}, format='json')
         self.assertEqual(res.status_code, 502)
@@ -199,7 +199,8 @@ class MoodleEndpointDegradationTests(TestCase):
              mock.patch('src.common.moodle_client.MOODLE_TOKEN', ''):
             res = self.client.post(
                 '/api/v1/moodle/grades/assignment/',
-                {'assignment_id': 2, 'grades': [{'email': 'a@b.com', 'grade': 100}]},
+                {'assignment_id': 2,
+                 'grades': [{'email': 'student@example.com', 'grade': 100}]},
                 format='json',
             )
         self.assertEqual(res.status_code, 503)

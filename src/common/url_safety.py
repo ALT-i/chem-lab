@@ -18,8 +18,16 @@ def _is_blocked_address(host: str) -> bool:
     try:
         infos = socket.getaddrinfo(host, None)
     except socket.gaierror:
-        # If we cannot see where it points, we cannot vouch for it.
-        return True
+        # A name that does not resolve cannot carry the token anywhere: the
+        # request simply fails. Rejecting it here would instead lock an
+        # administrator out of saving a correct address during a transient DNS
+        # failure, so this is allowed through deliberately.
+        #
+        # Note this check cannot defeat DNS rebinding either, since the name is
+        # resolved again when the request is made. The meaningful protection
+        # against a late hop to an internal host is that MoodleClient refuses
+        # to follow redirects.
+        return False
 
     for info in infos:
         address = info[4][0]
