@@ -1,20 +1,77 @@
 import requests
 from typing import Any, Dict, List, Optional
 
-from src.config.common import MOODLE_BASE_URL, MOODLE_TOKEN
+from src.config.common import (
+    MOODLE_BASE_URL,
+    MOODLE_TOKEN,
+    MOODLE_COURSE_ID,
+    MOODLE_DEFAULT_ASSIGNMENT_ID,
+)
+
+
+class MoodleNotConfigured(Exception):
+    """Raised when no usable Moodle site/token is available.
+
+    Distinct from MoodleError so callers can return 'not set up yet'
+    (an administrator action) rather than 'the call failed'.
+    """
+
+
+class MoodleError(Exception):
+    """Raised when Moodle is configured but the request did not succeed."""
+
+
+def get_moodle_settings():
+    """Resolve Moodle settings: database configuration first, env as fallback.
+
+    Imported lazily so this module stays importable before migrations run.
+    """
+    base_url, token = MOODLE_BASE_URL, MOODLE_TOKEN
+    course_id, assignment_id = MOODLE_COURSE_ID, MOODLE_DEFAULT_ASSIGNMENT_ID
+    try:
+        from src.common.models import MoodleConfiguration
+
+        config = MoodleConfiguration.objects.filter(pk=MoodleConfiguration.SINGLETON_PK).first()
+    except Exception:  # table not migrated yet, or db unavailable
+        config = None
+
+    if config is not None:
+        if not config.is_active:
+            return {'base_url': '', 'token': '', 'course_id': course_id, 'default_assignment_id': assignment_id}
+        base_url = config.base_url or base_url
+        token = config.token or token
+        if config.course_id is not None:
+            course_id = config.course_id
+        if config.default_assignment_id is not None:
+            assignment_id = config.default_assignment_id
+
+    return {
+        'base_url': (base_url or '').rstrip('/'),
+        'token': token or '',
+        'course_id': course_id,
+        'default_assignment_id': assignment_id,
+    }
 
 
 class MoodleClient:
     """Lightweight client for Moodle REST web services (JSON).
 
-    Requires MOODLE_BASE_URL and MOODLE_TOKEN to be configured.
+    Reads its connection details from the MoodleConfiguration row so an
+    administrator can repoint the lab at a different Moodle site without a
+    redeploy, falling back to MOODLE_BASE_URL / MOODLE_TOKEN settings.
     """
 
     def __init__(self, base_url: Optional[str] = None, token: Optional[str] = None) -> None:
-        self.base_url = (base_url or MOODLE_BASE_URL).rstrip('/')
-        self.token = token or MOODLE_TOKEN
+        resolved = get_moodle_settings()
+        self.base_url = (base_url or resolved['base_url']).rstrip('/')
+        self.token = token or resolved['token']
+        self.course_id = resolved['course_id']
+        self.default_assignment_id = resolved['default_assignment_id']
         if not self.base_url or not self.token:
-            raise ValueError("Moodle configuration missing: set MOODLE_BASE_URL and MOODLE_TOKEN")
+            raise MoodleNotConfigured(
+                "Moodle has not been set up yet. An administrator needs to add the Moodle "
+                "site address and web service token in the admin dashboard."
+            )
 
     def _endpoint(self) -> str:
         return f"{self.base_url}/webservice/rest/server.php"
@@ -26,22 +83,42 @@ class MoodleClient:
             'moodlewsrestformat': 'json',
         }
         data.update(params)
-        resp = requests.post(self._endpoint(), data=data, timeout=20)
-        resp.raise_for_status()
-        payload = resp.json()
+        try:
+            resp = requests.post(self._endpoint(), data=data, timeout=20)
+        except requests.RequestException as exc:
+            raise MoodleError(f"Could not reach the Moodle site at {self.base_url}: {exc}") from exc
+
+        if resp.status_code >= 400:
+            # A decommissioned MoodleCloud site answers with a redirect to a
+            # "not found" page rather than a Moodle API error, so say so plainly.
+            raise MoodleError(
+                f"The Moodle site at {self.base_url} returned HTTP {resp.status_code}. "
+                "Check that the site address is correct and the site is still active."
+            )
+
+        try:
+            payload = resp.json()
+        except ValueError:
+            raise MoodleError(
+                f"The Moodle site at {self.base_url} did not return a valid API response. "
+                "Check that the site address points at a live Moodle installation."
+            )
+
         # Moodle errors often come as {"exception": ..., "message": ...}
         if isinstance(payload, dict) and payload.get('exception'):
-            raise RuntimeError(f"Moodle API error: {payload.get('message')} ({payload.get('exception')})")
+            raise MoodleError(f"Moodle API error: {payload.get('message')} ({payload.get('exception')})")
         return payload
+
+    def check_connection(self) -> Dict[str, Any]:
+        """Validate the configured site/token. Raises MoodleError on failure."""
+        return self._post('core_webservice_get_site_info', {})
 
     def get_users_by_email(self, emails: List[str]) -> List[Dict[str, Any]]:
         # core_user_get_users_by_field requires field and values[]
         params: Dict[str, Any] = {'field': 'email'}
         for idx, email in enumerate(emails):
             params[f"values[{idx}]"] = email
-        print(f"[Moodle] Searching for users by email: {emails}")
         result = self._post('core_user_get_users_by_field', params)
-        print(f"[Moodle] Found {len(result) if result else 0} users")
         return result
 
     def get_enrolled_users(self, course_id: int) -> List[Dict[str, Any]]:
@@ -71,13 +148,4 @@ class MoodleClient:
         if feedback:
             params['plugindata[assignfeedbackcomments_editor][text]'] = feedback
             params['plugindata[assignfeedbackcomments_editor][format]'] = 1
-        print(f"[Moodle] Saving grade: assignment_id={assignment_id}, user_id={user_id}, grade={grade}")
-        try:
-            result = self._post('mod_assign_save_grade', params)
-            print(f"[Moodle] Grade saved successfully")
-            return result
-        except Exception as e:
-            print(f"[Moodle] Error saving grade: {e}")
-            raise
-
-
+        return self._post('mod_assign_save_grade', params)

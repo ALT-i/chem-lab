@@ -31,5 +31,17 @@ RUN pip install -r ./requirements/prod.txt
 
 COPY . ./
 
-CMD python manage.py collectstatic --no-input && python manage.py migrate && python manage.py runserver 0.0.0.0:8000
+# runserver is Django's development server: single-worker, auto-reloading and
+# explicitly not for production. gunicorn is already a dependency and
+# WhiteNoise is in MIDDLEWARE, so static files are still served correctly.
+# Worker count is deliberately low by default (these workers each load
+# numpy/scipy/chempy); raise it with WEB_CONCURRENCY if the instance has room.
+CMD python manage.py collectstatic --no-input && \
+    python manage.py migrate && \
+    gunicorn src.wsgi:application \
+        --bind "0.0.0.0:${PORT:-8000}" \
+        --workers "${WEB_CONCURRENCY:-2}" \
+        --timeout 120 \
+        --limit-request-line 6094 \
+        --access-logfile -
 

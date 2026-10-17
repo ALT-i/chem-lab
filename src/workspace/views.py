@@ -12,7 +12,12 @@ from rest_framework.views import APIView
 from .models import *
 from .serializers import *
 from .grading import calculate_session_grade, evaluate_measurement_step
-from src.common.moodle_client import MoodleClient
+from src.common.moodle_client import (
+    MoodleClient,
+    MoodleNotConfigured,
+    MoodleError,
+    get_moodle_settings,
+)
 from src.users.permissions import (
     IsInstructorOrAdmin,
     IsInstructorOrAdminOrReadOnly,
@@ -148,8 +153,15 @@ class MoodleStudentsView(APIView):
             course_int = int(course_id)
         except ValueError:
             return Response({'detail': 'course_id must be an integer'}, status=status.HTTP_400_BAD_REQUEST)
-        client = MoodleClient()
-        users = client.get_enrolled_users(course_int)
+        try:
+            client = MoodleClient()
+            users = client.get_enrolled_users(course_int)
+        except MoodleNotConfigured as exc:
+            return Response({'detail': str(exc), 'code': 'moodle_not_configured'},
+                            status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        except MoodleError as exc:
+            return Response({'detail': str(exc), 'code': 'moodle_unavailable'},
+                            status=status.HTTP_502_BAD_GATEWAY)
         return Response(users, status=status.HTTP_200_OK)
 
 
@@ -163,17 +175,22 @@ class MoodleUserProfileView(APIView):
         try:
             client = MoodleClient()
             users = client.get_users_by_email([email])
-            if not users or len(users) == 0:
-                return Response({
-                    'detail': f'User not found in Moodle with email: {email}',
-                    'searched_email': email
-                }, status=status.HTTP_404_NOT_FOUND)
-            return Response(users[0], status=status.HTTP_200_OK)
-        except Exception as e:
+        except MoodleNotConfigured as exc:
+            return Response({'detail': str(exc), 'code': 'moodle_not_configured',
+                             'searched_email': email},
+                            status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        except MoodleError as exc:
+            return Response({'detail': str(exc), 'code': 'moodle_unavailable',
+                             'searched_email': email},
+                            status=status.HTTP_502_BAD_GATEWAY)
+
+        if not users:
             return Response({
-                'detail': f'Error fetching from Moodle: {str(e)}',
-                'searched_email': email
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                'detail': f'No Moodle account found for {email}.',
+                'code': 'moodle_user_not_found',
+                'searched_email': email,
+            }, status=status.HTTP_404_NOT_FOUND)
+        return Response(users[0], status=status.HTTP_200_OK)
 
 
 class MoodleAssignmentGradesView(APIView):
@@ -184,19 +201,38 @@ class MoodleAssignmentGradesView(APIView):
         course_id = data.get('course_id')
         assignment_id = data.get('assignment_id')
         grades = data.get('grades') or []
-        if course_id is None or assignment_id is None:
-            return Response({'detail': 'course_id and assignment_id are required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # course_id is optional: fall back to whichever course the institution
+        # configured, so clients need not hardcode one.
+        if course_id is None:
+            course_id = get_moodle_settings().get('course_id')
+        if course_id is None:
+            return Response(
+                {'detail': 'No Moodle course has been configured. Set one in the admin dashboard, '
+                           'or pass course_id explicitly.',
+                 'code': 'moodle_not_configured'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        if assignment_id is None:
+            return Response({'detail': 'assignment_id is required'}, status=status.HTTP_400_BAD_REQUEST)
         try:
             course_int = int(course_id)
             assignment_int = int(assignment_id)
-        except ValueError:
+        except (TypeError, ValueError):
             return Response({'detail': 'course_id and assignment_id must be integers'}, status=status.HTTP_400_BAD_REQUEST)
 
         if not isinstance(grades, list) or len(grades) == 0:
             return Response({'detail': 'grades must be a non-empty list'}, status=status.HTTP_400_BAD_REQUEST)
 
-        client = MoodleClient()
-        enrolled = client.get_enrolled_users(course_int)
+        try:
+            client = MoodleClient()
+            enrolled = client.get_enrolled_users(course_int)
+        except MoodleNotConfigured as exc:
+            return Response({'detail': str(exc), 'code': 'moodle_not_configured'},
+                            status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        except MoodleError as exc:
+            return Response({'detail': str(exc), 'code': 'moodle_unavailable'},
+                            status=status.HTTP_502_BAD_GATEWAY)
         enrolled_by_email = {u.get('email'): u for u in enrolled if u.get('email')}
 
         results = []
