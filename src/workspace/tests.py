@@ -293,3 +293,48 @@ class DynamicGradingTests(TestCase):
         self.assertGreaterEqual(result['overall_grade'], 95.0)
         self.assertEqual(len(result['step_evaluations']), 2)
         self.assertIn('Dynamic Grade', result['feedback'])
+
+
+class DeadImageRepointTests(TestCase):
+    """The merge-result image repoint must only touch the known dead URLs."""
+
+    @staticmethod
+    def _load_migration():
+        # The module name begins with a digit, so it cannot be imported normally.
+        from importlib import util
+        import os
+
+        path = os.path.join(
+            os.path.dirname(__file__), 'migrations', '0018_repoint_dead_mergerule_images.py'
+        )
+        spec = util.spec_from_file_location('repoint_migration', path)
+        mod = util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    def test_only_known_dead_images_are_rewritten(self):
+        mod = self._load_migration()
+        dead = 'https://chem-lab-backend.onrender.com/media/substances/250mLFlask_DtizFfV.svg'
+        alive = 'https://res.cloudinary.com/dl1qqgbdw/image/upload/v1/keep-me.svg'
+        unknown_dead = 'https://chem-lab-backend.onrender.com/media/substances/no-replacement.svg'
+        procedure = {'steps': [
+            {'mergeRules': [{'result': {'name': 'a', 'image': dead}}]},
+            {'mergeRules': [{'result': {'name': 'b', 'image': alive}}]},
+            {'mergeRules': [{'result': {'name': 'c', 'image': unknown_dead}}]},
+        ]}
+
+        self.assertTrue(mod._repoint(procedure, mod.DEAD_IMAGE_REPLACEMENTS))
+        self.assertEqual(
+            procedure['steps'][0]['mergeRules'][0]['result']['image'],
+            mod.DEAD_IMAGE_REPLACEMENTS[dead],
+        )
+        # A working image is untouched...
+        self.assertEqual(procedure['steps'][1]['mergeRules'][0]['result']['image'], alive)
+        # ...and a dead one with no known replacement is left for the client
+        # fallback rather than being pointed at something wrong.
+        self.assertEqual(procedure['steps'][2]['mergeRules'][0]['result']['image'], unknown_dead)
+
+    def test_malformed_procedures_are_ignored(self):
+        mod = self._load_migration()
+        for bad in (None, {}, {'steps': None}, {'steps': ['nope']}, {'steps': [{}]}):
+            self.assertFalse(mod._repoint(bad, mod.DEAD_IMAGE_REPLACEMENTS))
