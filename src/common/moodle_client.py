@@ -84,9 +84,20 @@ class MoodleClient:
         }
         data.update(params)
         try:
-            resp = requests.post(self._endpoint(), data=data, timeout=20)
+            # allow_redirects=False: the destination was validated, but a
+            # redirect could hop somewhere internal and would carry the token.
+            resp = requests.post(
+                self._endpoint(), data=data, timeout=20, allow_redirects=False
+            )
         except requests.RequestException as exc:
             raise MoodleError(f"Could not reach the Moodle site at {self.base_url}: {exc}") from exc
+
+        if resp.is_redirect or resp.status_code in (301, 302, 303, 307, 308):
+            raise MoodleError(
+                f"The Moodle site at {self.base_url} redirected the request instead of "
+                "answering it. A decommissioned MoodleCloud site does this. Check that "
+                "the site address is correct and the site is still active."
+            )
 
         if resp.status_code >= 400:
             # A decommissioned MoodleCloud site answers with a redirect to a

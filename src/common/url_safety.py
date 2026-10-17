@@ -18,8 +18,8 @@ def _is_blocked_address(host: str) -> bool:
     try:
         infos = socket.getaddrinfo(host, None)
     except socket.gaierror:
-        # Unresolvable: let the request itself fail rather than guessing.
-        return False
+        # If we cannot see where it points, we cannot vouch for it.
+        return True
 
     for info in infos:
         address = info[4][0]

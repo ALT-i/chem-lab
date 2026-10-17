@@ -22,9 +22,27 @@ class MoodleConfigurationAdmin(admin.ModelAdmin):
         ('Last verification', {'fields': ('last_verified_at', 'last_verification_error', 'updated_at', 'updated_by')}),
     )
 
+    def _is_allowed(self, request):
+        # Institution-wide credentials: superusers only, regardless of what
+        # other model permissions a staff account may have been granted.
+        return bool(getattr(request.user, 'is_superuser', False))
+
+    def has_module_permission(self, request):
+        return self._is_allowed(request)
+
+    def has_view_permission(self, request, obj=None):
+        return self._is_allowed(request)
+
+    def has_change_permission(self, request, obj=None):
+        return self._is_allowed(request)
+
     def has_add_permission(self, request):
         # The singleton row is created on demand by MoodleConfiguration.load().
-        return not MoodleConfiguration.objects.exists()
+        return (
+            super().has_add_permission(request)
+            and self._is_allowed(request)
+            and not MoodleConfiguration.objects.exists()
+        )
 
     def has_delete_permission(self, request, obj=None):
         return False

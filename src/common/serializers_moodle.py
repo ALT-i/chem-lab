@@ -58,6 +58,25 @@ class MoodleConfigurationSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(str(exc))
         return value
 
+    def validate(self, attrs):
+        # Keeping the old token while repointing at a different site would
+        # send the existing credential to the new host. Moving site means
+        # re-entering the token that belongs to it.
+        new_url = attrs.get('base_url')
+        instance = self.instance
+        if (
+            new_url
+            and instance is not None
+            and instance.base_url
+            and new_url != instance.base_url
+            and not attrs.get('token')
+        ):
+            raise serializers.ValidationError({
+                'token': 'Enter the web service token for the new site. '
+                         'The existing token belongs to the previous site and will not be reused.'
+            })
+        return attrs
+
     def update(self, instance, validated_data):
         # A blank token means "leave the existing one alone".
         if not validated_data.get('token'):

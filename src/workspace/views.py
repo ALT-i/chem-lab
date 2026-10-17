@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError
 from django.shortcuts import render
 
 from rest_framework.viewsets import ModelViewSet
@@ -227,7 +228,8 @@ class MoodleAssignmentGradesView(APIView):
         # A student may only ever push a result for themselves. Without this
         # any authenticated student could post a grade for any classmate --
         # or for the whole cohort -- simply by listing their emails.
-        if not is_staff_user(request.user):
+        is_staff = is_staff_user(request.user)
+        if not is_staff:
             own_email = (request.user.email or '').lower()
             foreign = [
                 (g or {}).get('email')
@@ -265,14 +267,38 @@ class MoodleAssignmentGradesView(APIView):
             feedback = (entry or {}).get('feedback')
             session_id = (entry or {}).get('session_id')
 
-            # Dynamic grading evaluation from session if grade is not explicitly given or if session_id passed
-            if grade_value is None and session_id:
+            if not is_staff:
+                # A student does not get to assert their own mark. Discard
+                # anything they sent and derive it from the measurements
+                # recorded against their own session.
+                grade_value = None
+                feedback = None
+                if not session_id:
+                    results.append({
+                        'email': email,
+                        'status': 'error',
+                        'code': 'session_required',
+                        'detail': 'A completed lab session is required before results can be submitted.',
+                    })
+                    continue
                 try:
-                    # Students may only grade from their own session.
-                    session_qs = LessonSession.objects.all()
-                    if not is_staff_user(request.user):
-                        session_qs = session_qs.filter(student=request.user)
-                    session = session_qs.get(id=session_id)
+                    session = LessonSession.objects.get(id=session_id, student=request.user)
+                except (LessonSession.DoesNotExist, ValueError, ValidationError):
+                    results.append({
+                        'email': email,
+                        'status': 'error',
+                        'code': 'session_required',
+                        'detail': 'That lab session does not belong to you.',
+                    })
+                    continue
+                eval_res = calculate_session_grade(session.measurements or {})
+                grade_value = eval_res['overall_grade']
+                feedback = eval_res['feedback']
+
+            # Staff may still grade straight from a session if they pass one.
+            elif grade_value is None and session_id:
+                try:
+                    session = LessonSession.objects.get(id=session_id)
                     eval_res = calculate_session_grade(session.measurements or {})
                     grade_value = eval_res['overall_grade']
                     if not feedback:

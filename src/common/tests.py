@@ -318,3 +318,78 @@ class MoodleGradeSubmissionAuthorizationTests(TestCase):
             )
         self.assertEqual(res.status_code, 403)
         posted.assert_not_called()
+
+    def test_student_grade_is_computed_server_side_not_asserted(self):
+        """A client-supplied grade must be ignored entirely."""
+        from src.workspace.models import Lesson, LessonSession
+
+        instructor = User.objects.create_instructor(
+            email='teach2@example.com', password='p', role=User.Roles.INSTRUCTOR
+        )
+        lesson = Lesson.objects.create(title='T', description='d', instructor=instructor)
+        session = LessonSession.objects.create(
+            lesson=lesson, student=self.student,
+            measurements={'readings': [
+                # deliberately a poor measurement: 30 where 25 was wanted
+                {'stepIndex': 0, 'targetVolume': 25.0, 'measuredVolume': 30.0,
+                 'precision': 0.05, 'tolerance': 0.2}
+            ]},
+        )
+        captured = {}
+
+        def fake_post(url, data=None, **kwargs):
+            captured.setdefault('calls', []).append(data)
+            resp = mock.Mock(status_code=200, is_redirect=False)
+            if data.get('wsfunction') == 'core_enrol_get_enrolled_users':
+                resp.json.return_value = [{'id': 5, 'email': 'me@example.com'}]
+            else:
+                resp.json.return_value = {}
+            return resp
+
+        with mock.patch('src.common.moodle_client.requests.post', side_effect=fake_post):
+            res = self.client.post(
+                '/api/v1/moodle/grades/assignment/',
+                {'assignment_id': 2, 'grades': [
+                    {'email': 'me@example.com', 'grade': 100, 'session_id': str(session.id)}
+                ]},
+                format='json',
+            )
+        self.assertEqual(res.status_code, 200, res.data)
+        graded = [c for c in captured['calls'] if c.get('wsfunction') == 'mod_assign_save_grade']
+        self.assertEqual(len(graded), 1)
+        # The claimed 100 must not have been used.
+        self.assertLess(float(graded[0]['grade']), 100.0)
+
+    def test_student_without_a_session_cannot_submit(self):
+        with mock.patch('src.common.moodle_client.requests.post') as posted:
+            posted.return_value = mock.Mock(status_code=200, is_redirect=False)
+            posted.return_value.json.return_value = [{'id': 5, 'email': 'me@example.com'}]
+            res = self.client.post(
+                '/api/v1/moodle/grades/assignment/',
+                {'assignment_id': 2, 'grades': [{'email': 'me@example.com', 'grade': 100}]},
+                format='json',
+            )
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data['results'][0]['code'], 'session_required')
+
+    def test_student_cannot_grade_from_someone_elses_session(self):
+        from src.workspace.models import Lesson, LessonSession
+
+        instructor = User.objects.create_instructor(
+            email='teach3@example.com', password='p', role=User.Roles.INSTRUCTOR
+        )
+        lesson = Lesson.objects.create(title='T', description='d', instructor=instructor)
+        other_session = LessonSession.objects.create(
+            lesson=lesson, student=self.classmate, measurements={'readings': []}
+        )
+        with mock.patch('src.common.moodle_client.requests.post') as posted:
+            posted.return_value = mock.Mock(status_code=200, is_redirect=False)
+            posted.return_value.json.return_value = [{'id': 5, 'email': 'me@example.com'}]
+            res = self.client.post(
+                '/api/v1/moodle/grades/assignment/',
+                {'assignment_id': 2, 'grades': [
+                    {'email': 'me@example.com', 'session_id': str(other_session.id)}
+                ]},
+                format='json',
+            )
+        self.assertEqual(res.data['results'][0]['code'], 'session_required')
