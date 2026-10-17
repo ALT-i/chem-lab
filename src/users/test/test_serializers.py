@@ -1,6 +1,9 @@
+# Every test below is commented out; the module only existed to carry these
+# imports. `nose` is unmaintained and does not support modern Python, so it
+# is not in dev.txt -- importing it here broke collection of the whole suite.
+# If these tests are revived, use plain assertSomething from TestCase.
 from django.test import TestCase
 from django.contrib.auth.hashers import check_password
-from nose.tools import eq_, ok_
 from ..serializers import CreateUserSerializer
 
 

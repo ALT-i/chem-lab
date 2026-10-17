@@ -63,15 +63,25 @@ class MoodleConfigurationSerializer(serializers.ModelSerializer):
         # send the existing credential to the new host. Compare against the
         # EFFECTIVE url -- the one the stored token is actually used with,
         # which may come from settings rather than this row.
-        from src.common.moodle_client import get_moodle_settings
+        from src.common import moodle_client
 
         if 'base_url' not in attrs:
             return attrs
 
         new_url = (attrs.get('base_url') or '').rstrip('/')
-        resolved = get_moodle_settings()
-        effective_url = resolved.get('base_url') or ''
-        has_token = bool(resolved.get('token'))
+        # Read the stored and environment values directly rather than through
+        # get_moodle_settings(): that blanks everything when is_active is off,
+        # which would let an admin disable the integration, repoint base_url
+        # with no token, then re-enable it with the old credential attached to
+        # the new host.
+        instance = self.instance
+        stored_token = getattr(instance, 'token', '') or ''
+        stored_url = (getattr(instance, 'base_url', '') or '').rstrip('/')
+        env_token = moodle_client.MOODLE_TOKEN or ''
+        env_url = (moodle_client.MOODLE_BASE_URL or '').rstrip('/')
+
+        effective_url = stored_url or env_url
+        has_token = bool(stored_token or env_token)
 
         if has_token and new_url != effective_url and not attrs.get('token'):
             if not new_url:

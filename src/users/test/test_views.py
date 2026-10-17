@@ -5,7 +5,10 @@ from rest_framework.test import APITestCase
 from rest_framework import status
 # from faker import Faker
 from ..models import User
-from .factories import UserFactory
+
+# NOTE: .factories needs factory-boy, which is commented out in dev.txt. Every
+# test in this module is commented out, so importing it only broke collection.
+# Re-add factory-boy to dev.txt before reviving the factory-based tests.
 
 # fake = Faker()
 
