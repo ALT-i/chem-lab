@@ -68,7 +68,7 @@ class MoodleSettingsResolutionTests(TestCase):
     def test_decommissioned_site_reports_clearly(self):
         """A dead MoodleCloud site redirects to an HTML 'not found' page."""
         c = MoodleConfiguration.load()
-        c.base_url, c.token = 'https://gone.moodlecloud.com', 'tok'
+        c.base_url, c.token = 'https://example.net', 'tok'
         c.save()
         fake = mock.Mock(status_code=200, is_redirect=False)
         fake.json.side_effect = ValueError('not json')
@@ -103,7 +103,7 @@ class MoodleConfigurationAPITests(TestCase):
         self.client.force_authenticate(user=self.admin)
         res = self.client.put(
             '/api/v1/moodle/config/',
-            {'base_url': 'https://noun.moodlecloud.com', 'token': 'secret-token', 'course_id': 7},
+            {'base_url': 'https://example.com', 'token': 'secret-token', 'course_id': 7},
             format='json',
         )
         self.assertEqual(res.status_code, 200, res.data)
@@ -115,7 +115,7 @@ class MoodleConfigurationAPITests(TestCase):
         self.client.force_authenticate(user=self.admin)
         self.client.put(
             '/api/v1/moodle/config/',
-            {'base_url': 'https://noun.moodlecloud.com', 'token': 'keep-me'},
+            {'base_url': 'https://example.com', 'token': 'keep-me'},
             format='json',
         )
         self.client.put('/api/v1/moodle/config/', {'course_id': 9, 'token': ''}, format='json')
@@ -125,7 +125,7 @@ class MoodleConfigurationAPITests(TestCase):
         self.client.force_authenticate(user=self.admin)
         res = self.client.put(
             '/api/v1/moodle/config/',
-            {'base_url': 'https://noun.moodlecloud.com/webservice/rest/server.php'},
+            {'base_url': 'https://example.com/webservice/rest/server.php'},
             format='json',
         )
         self.assertEqual(res.status_code, 400)
@@ -140,7 +140,7 @@ class MoodleConfigurationAPITests(TestCase):
         self.client.force_authenticate(user=self.admin)
         self.client.put(
             '/api/v1/moodle/config/',
-            {'base_url': 'https://noun.moodlecloud.com', 'token': 'tok'},
+            {'base_url': 'https://example.com', 'token': 'tok'},
             format='json',
         )
         fake = mock.Mock(status_code=200, is_redirect=False)
@@ -156,7 +156,7 @@ class MoodleConfigurationAPITests(TestCase):
         self.client.force_authenticate(user=self.admin)
         self.client.put(
             '/api/v1/moodle/config/',
-            {'base_url': 'https://noun.moodlecloud.com', 'token': 'bad'},
+            {'base_url': 'https://example.com', 'token': 'bad'},
             format='json',
         )
         fake = mock.Mock(status_code=403, is_redirect=False)
@@ -208,7 +208,7 @@ class MoodleEndpointDegradationTests(TestCase):
 
     def test_unreachable_site_is_502_not_500(self):
         c = MoodleConfiguration.load()
-        c.base_url, c.token = 'https://gone.moodlecloud.com', 'tok'
+        c.base_url, c.token = 'https://example.net', 'tok'
         c.save()
         import requests as _requests
 
@@ -233,7 +233,7 @@ class MoodleConfigSecurityTests(TestCase):
             email='teacher@example.com', password='p', role=User.Roles.INSTRUCTOR
         )
         c = MoodleConfiguration.load()
-        c.base_url, c.token = 'https://real.moodlecloud.com', 'REAL-SECRET-TOKEN'
+        c.base_url, c.token = 'https://example.com', 'REAL-SECRET-TOKEN'
         c.save()
 
     def test_instructors_cannot_change_institution_wide_settings(self):
@@ -244,7 +244,7 @@ class MoodleConfigSecurityTests(TestCase):
             '/api/v1/moodle/config/', {'base_url': 'https://evil.example.com'}, format='json'
         )
         self.assertIn(res.status_code, (401, 403))
-        self.assertEqual(MoodleConfiguration.load().base_url, 'https://real.moodlecloud.com')
+        self.assertEqual(MoodleConfiguration.load().base_url, 'https://example.com')
 
     def test_cannot_send_stored_token_to_an_attacker_supplied_host(self):
         """base_url without a token must be refused, not paired with the stored one."""
@@ -252,7 +252,7 @@ class MoodleConfigSecurityTests(TestCase):
         with mock.patch('src.common.moodle_client.requests.post') as posted:
             res = self.client.post(
                 '/api/v1/moodle/config/test/',
-                {'base_url': 'https://attacker.example.com'},
+                {'base_url': 'https://example.net'},
                 format='json',
             )
         self.assertEqual(res.status_code, 400)
@@ -277,7 +277,7 @@ class MoodleConfigSecurityTests(TestCase):
             '/api/v1/moodle/config/', {'base_url': 'https://127.0.0.1'}, format='json'
         )
         self.assertEqual(res.status_code, 400)
-        self.assertEqual(MoodleConfiguration.load().base_url, 'https://real.moodlecloud.com')
+        self.assertEqual(MoodleConfiguration.load().base_url, 'https://example.com')
 
 
 class MoodleGradeSubmissionAuthorizationTests(TestCase):
@@ -292,7 +292,7 @@ class MoodleGradeSubmissionAuthorizationTests(TestCase):
             email='someone.else@example.com', password='p', role=User.Roles.STUDENT
         )
         c = MoodleConfiguration.load()
-        c.base_url, c.token, c.course_id = 'https://real.moodlecloud.com', 'tok', 9
+        c.base_url, c.token, c.course_id = 'https://example.com', 'tok', 9
         c.save()
         self.client.force_authenticate(user=self.student)
 
@@ -469,11 +469,11 @@ class MoodleTokenRebindingTests(TestCase):
     def test_token_from_settings_still_forces_a_new_token_on_url_change(self):
         """The row may be blank while settings supply the credential."""
         MoodleConfiguration.load()
-        with mock.patch('src.common.moodle_client.MOODLE_BASE_URL', 'https://old.moodlecloud.com'), \
+        with mock.patch('src.common.moodle_client.MOODLE_BASE_URL', 'https://example.org'), \
              mock.patch('src.common.moodle_client.MOODLE_TOKEN', 'ENV-TOKEN'):
             res = self.client.put(
                 '/api/v1/moodle/config/',
-                {'base_url': 'https://attacker.example.com'},
+                {'base_url': 'https://example.net'},
                 format='json',
             )
         self.assertEqual(res.status_code, 400)
@@ -481,8 +481,58 @@ class MoodleTokenRebindingTests(TestCase):
 
     def test_clearing_the_address_also_clears_the_token(self):
         c = MoodleConfiguration.load()
-        c.base_url, c.token = 'https://old.moodlecloud.com', 'STORED'
+        c.base_url, c.token = 'https://example.org', 'STORED'
         c.save()
         res = self.client.put('/api/v1/moodle/config/', {'base_url': ''}, format='json')
         self.assertEqual(res.status_code, 200, res.data)
         self.assertEqual(MoodleConfiguration.load().token, '')
+
+
+class MoodleRequestTimeDestinationTests(TestCase):
+    """The destination is re-checked on every call, not just when saved."""
+
+    def test_token_is_not_sent_if_the_host_became_internal(self):
+        c = MoodleConfiguration.load()
+        c.base_url, c.token = 'https://example.com', 'SECRET'
+        c.save()
+        client = MoodleClient()
+
+        # Simulate the name now resolving somewhere internal (DNS rebinding).
+        with mock.patch('src.common.url_safety.socket.getaddrinfo',
+                        return_value=[(0, 0, 0, '', ('127.0.0.1', 0))]):
+            with mock.patch('src.common.moodle_client.requests.post') as posted:
+                with self.assertRaises(MoodleError):
+                    client.check_connection()
+            posted.assert_not_called()
+
+    def test_token_is_not_sent_if_the_host_stops_resolving(self):
+        c = MoodleConfiguration.load()
+        c.base_url, c.token = 'https://example.com', 'SECRET'
+        c.save()
+        client = MoodleClient()
+        import socket as _socket
+
+        with mock.patch('src.common.url_safety.socket.getaddrinfo',
+                        side_effect=_socket.gaierror('no such host')):
+            with mock.patch('src.common.moodle_client.requests.post') as posted:
+                with self.assertRaises(MoodleError):
+                    client.check_connection()
+            posted.assert_not_called()
+
+    def test_a_transient_dns_failure_does_not_block_saving(self):
+        """Saving is lenient; only sending the token fails closed."""
+        import socket as _socket
+
+        admin = User.objects.create_instructor(
+            email='admin3@example.com', password='p', role=User.Roles.ADMIN
+        )
+        client = APIClient()
+        client.force_authenticate(user=admin)
+        with mock.patch('src.common.url_safety.socket.getaddrinfo',
+                        side_effect=_socket.gaierror('temporary failure')):
+            res = client.put(
+                '/api/v1/moodle/config/',
+                {'base_url': 'https://example.com', 'token': 'tok'},
+                format='json',
+            )
+        self.assertEqual(res.status_code, 200, res.data)

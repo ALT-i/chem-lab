@@ -1,6 +1,7 @@
 import requests
 from typing import Any, Dict, List, Optional
 
+from src.common.url_safety import UnsafeUrl, validate_outbound_url
 from src.config.common import (
     MOODLE_BASE_URL,
     MOODLE_TOKEN,
@@ -83,6 +84,13 @@ class MoodleClient:
             'moodlewsrestformat': 'json',
         }
         data.update(params)
+        # Re-validate on every call, not just when the value was saved: DNS
+        # can change between the two, and this request carries the token.
+        try:
+            validate_outbound_url(self.base_url, block_unresolvable=True)
+        except UnsafeUrl as exc:
+            raise MoodleError(f"Refusing to contact {self.base_url}: {exc}") from exc
+
         try:
             # allow_redirects=False: the destination was validated, but a
             # redirect could hop somewhere internal and would carry the token.

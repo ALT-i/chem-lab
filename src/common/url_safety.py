@@ -13,21 +13,18 @@ class UnsafeUrl(ValueError):
     """The supplied URL may not be used for outbound requests."""
 
 
-def _is_blocked_address(host: str) -> bool:
+def _is_blocked_address(host: str, block_unresolvable: bool) -> bool:
     """True if the host resolves to anything that is not a public address."""
     try:
         infos = socket.getaddrinfo(host, None)
     except socket.gaierror:
-        # A name that does not resolve cannot carry the token anywhere: the
-        # request simply fails. Rejecting it here would instead lock an
-        # administrator out of saving a correct address during a transient DNS
-        # failure, so this is allowed through deliberately.
-        #
-        # Note this check cannot defeat DNS rebinding either, since the name is
-        # resolved again when the request is made. The meaningful protection
-        # against a late hop to an internal host is that MoodleClient refuses
-        # to follow redirects.
-        return False
+        # Policy differs by call site. When saving, a transient DNS failure
+        # must not stop an administrator storing a correct address, and a name
+        # that does not resolve cannot carry the token anywhere anyway. When
+        # about to send the token we fail closed instead: if we cannot see
+        # where it points, we do not send it, and the request would have
+        # failed regardless.
+        return block_unresolvable
 
     for info in infos:
         address = info[4][0]
@@ -47,8 +44,14 @@ def _is_blocked_address(host: str) -> bool:
     return False
 
 
-def validate_outbound_url(url: str, allow_http: bool = False) -> str:
-    """Return the normalised URL, or raise UnsafeUrl."""
+def validate_outbound_url(
+    url: str, allow_http: bool = False, block_unresolvable: bool = False
+) -> str:
+    """Return the normalised URL, or raise UnsafeUrl.
+
+    block_unresolvable=True is used immediately before a request carrying the
+    token; it is left False when merely validating a value being saved.
+    """
     if not url:
         raise UnsafeUrl('No site address was supplied.')
 
@@ -60,9 +63,10 @@ def validate_outbound_url(url: str, allow_http: bool = False) -> str:
     if parsed.username or parsed.password:
         raise UnsafeUrl('The site address must not embed credentials.')
 
-    if _is_blocked_address(parsed.hostname):
+    if _is_blocked_address(parsed.hostname, block_unresolvable):
         raise UnsafeUrl(
-            'That address points at a private or internal host, which is not allowed.'
+            'That address could not be verified as a public host. Check the site '
+            'address: internal and private addresses are not allowed.'
         )
 
     return url.rstrip('/')
