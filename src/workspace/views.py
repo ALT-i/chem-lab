@@ -194,6 +194,32 @@ class MoodleUserProfileView(APIView):
         return Response(users[0], status=status.HTTP_200_OK)
 
 
+def _recorded_steps(measurements):
+    """The step records a student actually produced during a session."""
+    if isinstance(measurements, dict):
+        records = (
+            measurements.get('measurements')
+            or measurements.get('steps')
+            or measurements.get('readings')
+            or []
+        )
+    elif isinstance(measurements, list):
+        records = measurements
+    else:
+        records = []
+    return [r for r in records if isinstance(r, dict)]
+
+
+def _required_steps(lesson):
+    """How many steps the lesson's procedure defines, or 0 if unknown."""
+    procedure = getattr(lesson, 'procedure', None) or {}
+    if isinstance(procedure, dict):
+        steps = procedure.get('steps') or []
+        if isinstance(steps, list):
+            return len(steps)
+    return 0
+
+
 class MoodleAssignmentGradesView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -291,6 +317,23 @@ class MoodleAssignmentGradesView(APIView):
                         'detail': 'That lab session does not belong to you.',
                     })
                     continue
+                # calculate_session_grade awards 100 when nothing was
+                # recorded, so an untouched session would be a free full
+                # mark. Require the student to have actually worked through
+                # the experiment's steps.
+                recorded = _recorded_steps(session.measurements)
+                required = _required_steps(session.lesson)
+                if not recorded or (required and len(recorded) < required):
+                    results.append({
+                        'email': email,
+                        'status': 'error',
+                        'code': 'session_incomplete',
+                        'detail': 'Complete every step of the experiment before submitting.',
+                        'steps_recorded': len(recorded),
+                        'steps_required': required,
+                    })
+                    continue
+
                 eval_res = calculate_session_grade(session.measurements or {})
                 grade_value = eval_res['overall_grade']
                 feedback = eval_res['feedback']

@@ -393,3 +393,95 @@ class MoodleGradeSubmissionAuthorizationTests(TestCase):
                 format='json',
             )
         self.assertEqual(res.data['results'][0]['code'], 'session_required')
+
+    def test_untouched_session_does_not_score_full_marks(self):
+        """calculate_session_grade returns 100 for no records; don't ship that."""
+        from src.workspace.models import Lesson, LessonSession
+
+        instructor = User.objects.create_instructor(
+            email='teach4@example.com', password='p', role=User.Roles.INSTRUCTOR
+        )
+        lesson = Lesson.objects.create(
+            title='T', description='d', instructor=instructor,
+            procedure={'steps': [{'description': 'one'}, {'description': 'two'}]},
+        )
+        empty = LessonSession.objects.create(
+            lesson=lesson, student=self.student, measurements={'readings': []}
+        )
+        with mock.patch('src.common.moodle_client.requests.post') as posted:
+            posted.return_value = mock.Mock(status_code=200, is_redirect=False)
+            posted.return_value.json.return_value = [{'id': 5, 'email': 'me@example.com'}]
+            res = self.client.post(
+                '/api/v1/moodle/grades/assignment/',
+                {'assignment_id': 2, 'grades': [
+                    {'email': 'me@example.com', 'session_id': str(empty.id)}
+                ]},
+                format='json',
+            )
+        self.assertEqual(res.data['results'][0]['code'], 'session_incomplete')
+        graded = [c for c in [kw.get('data') or (a[1] if len(a) > 1 else {})
+                              for a, kw in posted.call_args_list]
+                  if isinstance(c, dict) and c.get('wsfunction') == 'mod_assign_save_grade']
+        self.assertEqual(graded, [])
+
+    def test_partially_completed_session_is_rejected(self):
+        from src.workspace.models import Lesson, LessonSession
+
+        instructor = User.objects.create_instructor(
+            email='teach5@example.com', password='p', role=User.Roles.INSTRUCTOR
+        )
+        lesson = Lesson.objects.create(
+            title='T', description='d', instructor=instructor,
+            procedure={'steps': [{'description': 'one'}, {'description': 'two'}]},
+        )
+        half = LessonSession.objects.create(
+            lesson=lesson, student=self.student,
+            measurements={'readings': [
+                {'stepIndex': 0, 'targetVolume': 25.0, 'measuredVolume': 25.0,
+                 'precision': 0.05, 'tolerance': 0.2}
+            ]},
+        )
+        with mock.patch('src.common.moodle_client.requests.post') as posted:
+            posted.return_value = mock.Mock(status_code=200, is_redirect=False)
+            posted.return_value.json.return_value = [{'id': 5, 'email': 'me@example.com'}]
+            res = self.client.post(
+                '/api/v1/moodle/grades/assignment/',
+                {'assignment_id': 2, 'grades': [
+                    {'email': 'me@example.com', 'session_id': str(half.id)}
+                ]},
+                format='json',
+            )
+        self.assertEqual(res.data['results'][0]['code'], 'session_incomplete')
+        self.assertEqual(res.data['results'][0]['steps_required'], 2)
+
+
+class MoodleTokenRebindingTests(TestCase):
+    """The stored token must never follow the site address to a new host."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.admin = User.objects.create_instructor(
+            email='admin2@example.com', password='p', role=User.Roles.ADMIN
+        )
+        self.client.force_authenticate(user=self.admin)
+
+    def test_token_from_settings_still_forces_a_new_token_on_url_change(self):
+        """The row may be blank while settings supply the credential."""
+        MoodleConfiguration.load()
+        with mock.patch('src.common.moodle_client.MOODLE_BASE_URL', 'https://old.moodlecloud.com'), \
+             mock.patch('src.common.moodle_client.MOODLE_TOKEN', 'ENV-TOKEN'):
+            res = self.client.put(
+                '/api/v1/moodle/config/',
+                {'base_url': 'https://attacker.example.com'},
+                format='json',
+            )
+        self.assertEqual(res.status_code, 400)
+        self.assertIn('token', res.data['errors'])
+
+    def test_clearing_the_address_also_clears_the_token(self):
+        c = MoodleConfiguration.load()
+        c.base_url, c.token = 'https://old.moodlecloud.com', 'STORED'
+        c.save()
+        res = self.client.put('/api/v1/moodle/config/', {'base_url': ''}, format='json')
+        self.assertEqual(res.status_code, 200, res.data)
+        self.assertEqual(MoodleConfiguration.load().token, '')

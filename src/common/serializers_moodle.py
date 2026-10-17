@@ -60,17 +60,25 @@ class MoodleConfigurationSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         # Keeping the old token while repointing at a different site would
-        # send the existing credential to the new host. Moving site means
-        # re-entering the token that belongs to it.
-        new_url = attrs.get('base_url')
-        instance = self.instance
-        if (
-            new_url
-            and instance is not None
-            and instance.base_url
-            and new_url != instance.base_url
-            and not attrs.get('token')
-        ):
+        # send the existing credential to the new host. Compare against the
+        # EFFECTIVE url -- the one the stored token is actually used with,
+        # which may come from settings rather than this row.
+        from src.common.moodle_client import get_moodle_settings
+
+        if 'base_url' not in attrs:
+            return attrs
+
+        new_url = (attrs.get('base_url') or '').rstrip('/')
+        resolved = get_moodle_settings()
+        effective_url = resolved.get('base_url') or ''
+        has_token = bool(resolved.get('token'))
+
+        if has_token and new_url != effective_url and not attrs.get('token'):
+            if not new_url:
+                # Clearing the address: drop the credential with it rather
+                # than leaving a token that would pair with a settings URL.
+                self._force_clear_token = True
+                return attrs
             raise serializers.ValidationError({
                 'token': 'Enter the web service token for the new site. '
                          'The existing token belongs to the previous site and will not be reused.'
@@ -78,7 +86,10 @@ class MoodleConfigurationSerializer(serializers.ModelSerializer):
         return attrs
 
     def update(self, instance, validated_data):
-        # A blank token means "leave the existing one alone".
-        if not validated_data.get('token'):
+        if getattr(self, '_force_clear_token', False):
+            # The site address was cleared, so the token must go with it.
+            validated_data['token'] = ''
+        elif not validated_data.get('token'):
+            # A blank token otherwise means "leave the existing one alone".
             validated_data.pop('token', None)
         return super().update(instance, validated_data)
