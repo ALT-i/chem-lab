@@ -275,6 +275,50 @@ class MoodleAssignmentGradesView(APIView):
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
+            # Bind the submission to the experiment that was actually done.
+            # Otherwise a student could complete an easy experiment and post
+            # that session against a harder experiment's assignment.
+            entry = grades[0] or {}
+            bound_session_id = entry.get('session_id')
+            bound_session = None
+            if bound_session_id:
+                try:
+                    bound_session = LessonSession.objects.select_related('lesson').get(
+                        id=bound_session_id, student=request.user
+                    )
+                except (LessonSession.DoesNotExist, ValueError, ValidationError):
+                    bound_session = None
+            if bound_session is None:
+                return Response(
+                    {'detail': 'A completed lab session of your own is required before '
+                               'results can be submitted.',
+                     'code': 'session_required'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+            lesson_assignment = getattr(bound_session.lesson, 'moodle_assignment_id', None)
+            if lesson_assignment is None:
+                lesson_assignment = get_moodle_settings().get('default_assignment_id')
+            if lesson_assignment is None:
+                return Response(
+                    {'detail': 'This experiment is not linked to a Moodle assignment yet. '
+                               'Please ask your instructor.',
+                     'code': 'assignment_not_linked'},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            if int(assignment_int) != int(lesson_assignment):
+                return Response(
+                    {'detail': 'That result does not belong to the assignment you are '
+                               'submitting against.',
+                     'code': 'assignment_mismatch'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            # Course always comes from configuration for a student, never the
+            # request body.
+            configured_course = get_moodle_settings().get('course_id')
+            if configured_course is not None:
+                course_int = int(configured_course)
+
         try:
             client = MoodleClient()
             enrolled = client.get_enrolled_users(course_int)
@@ -299,24 +343,9 @@ class MoodleAssignmentGradesView(APIView):
                 # recorded against their own session.
                 grade_value = None
                 feedback = None
-                if not session_id:
-                    results.append({
-                        'email': email,
-                        'status': 'error',
-                        'code': 'session_required',
-                        'detail': 'A completed lab session is required before results can be submitted.',
-                    })
-                    continue
-                try:
-                    session = LessonSession.objects.get(id=session_id, student=request.user)
-                except (LessonSession.DoesNotExist, ValueError, ValidationError):
-                    results.append({
-                        'email': email,
-                        'status': 'error',
-                        'code': 'session_required',
-                        'detail': 'That lab session does not belong to you.',
-                    })
-                    continue
+                # Resolved and bound to this assignment above; a student is
+                # limited to a single entry, so there is exactly one.
+                session = bound_session
                 # calculate_session_grade awards 100 when nothing was
                 # recorded, so an untouched session would be a free full
                 # mark. Require the student to have actually worked through

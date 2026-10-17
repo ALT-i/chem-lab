@@ -327,7 +327,11 @@ class MoodleGradeSubmissionAuthorizationTests(TestCase):
         instructor = User.objects.create_instructor(
             email='teach2@example.com', password='p', role=User.Roles.INSTRUCTOR
         )
-        lesson = Lesson.objects.create(title='T', description='d', instructor=instructor)
+        lesson = Lesson.objects.create(
+            title='T', description='d', instructor=instructor,
+            moodle_assignment_id=2,
+            procedure={'steps': [{'description': 'only step'}]},
+        )
         session = LessonSession.objects.create(
             lesson=lesson, student=self.student,
             measurements={'readings': [
@@ -370,8 +374,8 @@ class MoodleGradeSubmissionAuthorizationTests(TestCase):
                 {'assignment_id': 2, 'grades': [{'email': 'me@example.com', 'grade': 100}]},
                 format='json',
             )
-        self.assertEqual(res.status_code, 200)
-        self.assertEqual(res.data['results'][0]['code'], 'session_required')
+        self.assertEqual(res.status_code, 403)
+        self.assertEqual(res.data['code'], 'session_required')
 
     def test_student_cannot_grade_from_someone_elses_session(self):
         from src.workspace.models import Lesson, LessonSession
@@ -379,7 +383,9 @@ class MoodleGradeSubmissionAuthorizationTests(TestCase):
         instructor = User.objects.create_instructor(
             email='teach3@example.com', password='p', role=User.Roles.INSTRUCTOR
         )
-        lesson = Lesson.objects.create(title='T', description='d', instructor=instructor)
+        lesson = Lesson.objects.create(
+            title='T', description='d', instructor=instructor, moodle_assignment_id=2
+        )
         other_session = LessonSession.objects.create(
             lesson=lesson, student=self.classmate, measurements={'readings': []}
         )
@@ -393,7 +399,8 @@ class MoodleGradeSubmissionAuthorizationTests(TestCase):
                 ]},
                 format='json',
             )
-        self.assertEqual(res.data['results'][0]['code'], 'session_required')
+        self.assertEqual(res.status_code, 403)
+        self.assertEqual(res.data['code'], 'session_required')
 
     def test_untouched_session_does_not_score_full_marks(self):
         """calculate_session_grade returns 100 for no records; don't ship that."""
@@ -404,6 +411,7 @@ class MoodleGradeSubmissionAuthorizationTests(TestCase):
         )
         lesson = Lesson.objects.create(
             title='T', description='d', instructor=instructor,
+            moodle_assignment_id=2,
             procedure={'steps': [{'description': 'one'}, {'description': 'two'}]},
         )
         empty = LessonSession.objects.create(
@@ -433,6 +441,7 @@ class MoodleGradeSubmissionAuthorizationTests(TestCase):
         )
         lesson = Lesson.objects.create(
             title='T', description='d', instructor=instructor,
+            moodle_assignment_id=2,
             procedure={'steps': [{'description': 'one'}, {'description': 'two'}]},
         )
         half = LessonSession.objects.create(
@@ -536,3 +545,118 @@ class MoodleRequestTimeDestinationTests(TestCase):
                 format='json',
             )
         self.assertEqual(res.status_code, 200, res.data)
+
+
+class MoodleAssignmentBindingTests(TestCase):
+    """A result must count for the experiment it was actually produced in."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.student = User.objects.create_user(
+            email='me@example.com', password='p', role=User.Roles.STUDENT
+        )
+        self.instructor = User.objects.create_instructor(
+            email='teach6@example.com', password='p', role=User.Roles.INSTRUCTOR
+        )
+        c = MoodleConfiguration.load()
+        c.base_url, c.token, c.course_id = 'https://example.com', 'tok', 9
+        c.save()
+        self.client.force_authenticate(user=self.student)
+
+        from src.workspace.models import Lesson, LessonSession
+
+        self.easy = Lesson.objects.create(
+            title='Easy', description='d', instructor=self.instructor,
+            moodle_assignment_id=11,
+            procedure={'steps': [{'description': 'only step'}]},
+        )
+        self.hard = Lesson.objects.create(
+            title='Hard', description='d', instructor=self.instructor,
+            moodle_assignment_id=22,
+            procedure={'steps': [{'description': 'a'}, {'description': 'b'}, {'description': 'c'}]},
+        )
+        self.easy_session = LessonSession.objects.create(
+            lesson=self.easy, student=self.student,
+            measurements={'readings': [
+                {'stepIndex': 0, 'targetVolume': 25.0, 'measuredVolume': 25.0,
+                 'precision': 0.05, 'tolerance': 0.2}
+            ]},
+        )
+
+    def test_easy_session_cannot_be_submitted_against_a_harder_assignment(self):
+        with mock.patch('src.common.moodle_client.requests.post') as posted:
+            res = self.client.post(
+                '/api/v1/moodle/grades/assignment/',
+                {'assignment_id': 22,  # the hard experiment
+                 'grades': [{'email': 'me@example.com',
+                             'session_id': str(self.easy_session.id)}]},
+                format='json',
+            )
+        self.assertEqual(res.status_code, 403, res.data)
+        self.assertEqual(res.data['code'], 'assignment_mismatch')
+        posted.assert_not_called()
+
+    def test_matching_assignment_is_accepted(self):
+        def fake_post(url, data=None, **kwargs):
+            resp = mock.Mock(status_code=200, is_redirect=False)
+            if data.get('wsfunction') == 'core_enrol_get_enrolled_users':
+                resp.json.return_value = [{'id': 5, 'email': 'me@example.com'}]
+            else:
+                resp.json.return_value = {}
+            return resp
+
+        with mock.patch('src.common.moodle_client.requests.post', side_effect=fake_post):
+            res = self.client.post(
+                '/api/v1/moodle/grades/assignment/',
+                {'assignment_id': 11,
+                 'grades': [{'email': 'me@example.com',
+                             'session_id': str(self.easy_session.id)}]},
+                format='json',
+            )
+        self.assertEqual(res.status_code, 200, res.data)
+        self.assertEqual(res.data['results'][0]['status'], 'ok', res.data)
+
+    def test_student_cannot_override_the_course(self):
+        """course_id in the body must be ignored for a student."""
+        seen = {}
+
+        def fake_post(url, data=None, **kwargs):
+            if data.get('wsfunction') == 'core_enrol_get_enrolled_users':
+                seen['courseid'] = data.get('courseid')
+                resp = mock.Mock(status_code=200, is_redirect=False)
+                resp.json.return_value = [{'id': 5, 'email': 'me@example.com'}]
+                return resp
+            resp = mock.Mock(status_code=200, is_redirect=False)
+            resp.json.return_value = {}
+            return resp
+
+        with mock.patch('src.common.moodle_client.requests.post', side_effect=fake_post):
+            self.client.post(
+                '/api/v1/moodle/grades/assignment/',
+                {'assignment_id': 11, 'course_id': 999,
+                 'grades': [{'email': 'me@example.com',
+                             'session_id': str(self.easy_session.id)}]},
+                format='json',
+            )
+        self.assertEqual(int(seen['courseid']), 9)  # the configured course, not 999
+
+    def test_instructor_may_still_grade_across_assignments(self):
+        self.client.force_authenticate(user=self.instructor)
+
+        def fake_post(url, data=None, **kwargs):
+            resp = mock.Mock(status_code=200, is_redirect=False)
+            if data.get('wsfunction') == 'core_enrol_get_enrolled_users':
+                resp.json.return_value = [{'id': 5, 'email': 'me@example.com'}]
+            else:
+                resp.json.return_value = {}
+            return resp
+
+        with mock.patch('src.common.moodle_client.requests.post', side_effect=fake_post):
+            res = self.client.post(
+                '/api/v1/moodle/grades/assignment/',
+                {'assignment_id': 22,
+                 'grades': [{'email': 'me@example.com', 'grade': 75}]},
+                format='json',
+            )
+        self.assertEqual(res.status_code, 200, res.data)
+        self.assertEqual(res.data['results'][0]['status'], 'ok')
