@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from src.common.models import MoodleConfiguration
+from src.common.url_safety import UnsafeUrl, validate_outbound_url
 
 
 class MoodleConfigurationSerializer(serializers.ModelSerializer):
@@ -50,6 +51,11 @@ class MoodleConfigurationSerializer(serializers.ModelSerializer):
                 "Enter only the site address, not the web service path. "
                 "Use https://your-site.moodlecloud.com rather than .../webservice/rest/server.php"
             )
+        # The stored token is sent to this host, so it must not be internal.
+        try:
+            value = validate_outbound_url(value)
+        except UnsafeUrl as exc:
+            raise serializers.ValidationError(str(exc))
         return value
 
     def update(self, instance, validated_data):

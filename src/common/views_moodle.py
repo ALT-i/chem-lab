@@ -8,7 +8,8 @@ from rest_framework.views import APIView
 from src.common.models import MoodleConfiguration
 from src.common.moodle_client import MoodleClient, MoodleError, MoodleNotConfigured
 from src.common.serializers_moodle import MoodleConfigurationSerializer
-from src.users.permissions import IsInstructorOrAdmin
+from src.common.url_safety import UnsafeUrl, validate_outbound_url
+from src.users.permissions import IsAdminOrSuper
 
 
 class MoodleConfigurationView(APIView):
@@ -18,7 +19,7 @@ class MoodleConfigurationView(APIView):
     PUT  - update settings; a blank token keeps the stored one
     """
 
-    permission_classes = [IsAuthenticated, IsInstructorOrAdmin]
+    permission_classes = [IsAuthenticated, IsAdminOrSuper]
 
     def get(self, request, *args, **kwargs):
         config = MoodleConfiguration.load()
@@ -53,13 +54,36 @@ class MoodleConnectionTestView(APIView):
     configuration row for later reference.
     """
 
-    permission_classes = [IsAuthenticated, IsInstructorOrAdmin]
+    permission_classes = [IsAuthenticated, IsAdminOrSuper]
 
     def post(self, request, *args, **kwargs):
         data = request.data or {}
         # Allow testing values before committing them.
         base_url = (data.get('base_url') or '').strip().rstrip('/') or None
         token = (data.get('token') or '').strip() or None
+
+        # A caller-supplied address must come with its own token. Otherwise
+        # MoodleClient would fall back to the STORED token and post it to
+        # whatever host was named -- handing the real credential to an
+        # arbitrary server.
+        if base_url is not None and token is None:
+            return Response(
+                {
+                    'ok': False,
+                    'code': 'token_required',
+                    'detail': 'To test a different site address you must also supply its token.',
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if base_url is not None:
+            try:
+                base_url = validate_outbound_url(base_url)
+            except UnsafeUrl as exc:
+                return Response(
+                    {'ok': False, 'code': 'unsafe_url', 'detail': str(exc)},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
         config = MoodleConfiguration.load()
         try:

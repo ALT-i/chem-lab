@@ -34,6 +34,16 @@ class IsInstructorOrAdmin(permissions.BasePermission):
         return is_staff_user(request.user)
 
 
+class IsAdminOrSuper(permissions.BasePermission):
+    """Institution-wide settings: ADMIN / SUPER only, not every instructor."""
+
+    def has_permission(self, request, view):
+        user = request.user
+        if not user or not user.is_authenticated or not isinstance(user, User):
+            return False
+        return user.role in {User.Roles.ADMIN, User.Roles.SUPER}
+
+
 class IsInstructorOrAdminOrReadOnly(permissions.BasePermission):
     """Catalogue permission: anyone may read, only staff may write.
 

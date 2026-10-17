@@ -218,3 +218,103 @@ class MoodleEndpointDegradationTests(TestCase):
             res = self.client.get('/api/v1/moodle/user/profile/?email=a@b.com')
         self.assertEqual(res.status_code, 502)
         self.assertEqual(res.data['code'], 'moodle_unavailable')
+
+
+class MoodleConfigSecurityTests(TestCase):
+    """Regression tests for the security review findings on this feature."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.admin = User.objects.create_instructor(
+            email='admin@example.com', password='p', role=User.Roles.ADMIN
+        )
+        self.instructor = User.objects.create_instructor(
+            email='teacher@example.com', password='p', role=User.Roles.INSTRUCTOR
+        )
+        c = MoodleConfiguration.load()
+        c.base_url, c.token = 'https://real.moodlecloud.com', 'REAL-SECRET-TOKEN'
+        c.save()
+
+    def test_instructors_cannot_change_institution_wide_settings(self):
+        """Repointing the whole institution's Moodle is an admin action."""
+        self.client.force_authenticate(user=self.instructor)
+        self.assertIn(self.client.get('/api/v1/moodle/config/').status_code, (401, 403))
+        res = self.client.put(
+            '/api/v1/moodle/config/', {'base_url': 'https://evil.example.com'}, format='json'
+        )
+        self.assertIn(res.status_code, (401, 403))
+        self.assertEqual(MoodleConfiguration.load().base_url, 'https://real.moodlecloud.com')
+
+    def test_cannot_send_stored_token_to_an_attacker_supplied_host(self):
+        """base_url without a token must be refused, not paired with the stored one."""
+        self.client.force_authenticate(user=self.admin)
+        with mock.patch('src.common.moodle_client.requests.post') as posted:
+            res = self.client.post(
+                '/api/v1/moodle/config/test/',
+                {'base_url': 'https://attacker.example.com'},
+                format='json',
+            )
+        self.assertEqual(res.status_code, 400)
+        self.assertEqual(res.data['code'], 'token_required')
+        posted.assert_not_called()  # the real token never left the server
+
+    def test_internal_addresses_are_rejected_on_test(self):
+        self.client.force_authenticate(user=self.admin)
+        for host in ('http://localhost:8000', 'https://127.0.0.1', 'https://169.254.169.254'):
+            with mock.patch('src.common.moodle_client.requests.post') as posted:
+                res = self.client.post(
+                    '/api/v1/moodle/config/test/',
+                    {'base_url': host, 'token': 'whatever'},
+                    format='json',
+                )
+            self.assertEqual(res.status_code, 400, host)
+            posted.assert_not_called()
+
+    def test_internal_addresses_are_rejected_on_save(self):
+        self.client.force_authenticate(user=self.admin)
+        res = self.client.put(
+            '/api/v1/moodle/config/', {'base_url': 'https://127.0.0.1'}, format='json'
+        )
+        self.assertEqual(res.status_code, 400)
+        self.assertEqual(MoodleConfiguration.load().base_url, 'https://real.moodlecloud.com')
+
+
+class MoodleGradeSubmissionAuthorizationTests(TestCase):
+    """A student must not be able to push a grade for anyone else."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.student = User.objects.create_user(
+            email='me@example.com', password='p', role=User.Roles.STUDENT
+        )
+        self.classmate = User.objects.create_user(
+            email='someone.else@example.com', password='p', role=User.Roles.STUDENT
+        )
+        c = MoodleConfiguration.load()
+        c.base_url, c.token, c.course_id = 'https://real.moodlecloud.com', 'tok', 9
+        c.save()
+        self.client.force_authenticate(user=self.student)
+
+    def test_student_cannot_grade_a_classmate(self):
+        with mock.patch('src.common.moodle_client.requests.post') as posted:
+            res = self.client.post(
+                '/api/v1/moodle/grades/assignment/',
+                {'assignment_id': 2,
+                 'grades': [{'email': 'someone.else@example.com', 'grade': 0}]},
+                format='json',
+            )
+        self.assertEqual(res.status_code, 403, res.data)
+        posted.assert_not_called()
+
+    def test_student_cannot_bulk_grade_the_cohort(self):
+        with mock.patch('src.common.moodle_client.requests.post') as posted:
+            res = self.client.post(
+                '/api/v1/moodle/grades/assignment/',
+                {'assignment_id': 2, 'grades': [
+                    {'email': 'me@example.com', 'grade': 100},
+                    {'email': 'someone.else@example.com', 'grade': 0},
+                ]},
+                format='json',
+            )
+        self.assertEqual(res.status_code, 403)
+        posted.assert_not_called()

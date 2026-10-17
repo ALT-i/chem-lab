@@ -224,6 +224,29 @@ class MoodleAssignmentGradesView(APIView):
         if not isinstance(grades, list) or len(grades) == 0:
             return Response({'detail': 'grades must be a non-empty list'}, status=status.HTTP_400_BAD_REQUEST)
 
+        # A student may only ever push a result for themselves. Without this
+        # any authenticated student could post a grade for any classmate --
+        # or for the whole cohort -- simply by listing their emails.
+        if not is_staff_user(request.user):
+            own_email = (request.user.email or '').lower()
+            foreign = [
+                (g or {}).get('email')
+                for g in grades
+                if ((g or {}).get('email') or '').lower() != own_email
+            ]
+            if foreign:
+                return Response(
+                    {'detail': 'You can only submit your own result.',
+                     'code': 'not_your_submission'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            if len(grades) > 1:
+                return Response(
+                    {'detail': 'You can only submit one result at a time.',
+                     'code': 'not_your_submission'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
         try:
             client = MoodleClient()
             enrolled = client.get_enrolled_users(course_int)
@@ -245,7 +268,11 @@ class MoodleAssignmentGradesView(APIView):
             # Dynamic grading evaluation from session if grade is not explicitly given or if session_id passed
             if grade_value is None and session_id:
                 try:
-                    session = LessonSession.objects.get(id=session_id)
+                    # Students may only grade from their own session.
+                    session_qs = LessonSession.objects.all()
+                    if not is_staff_user(request.user):
+                        session_qs = session_qs.filter(student=request.user)
+                    session = session_qs.get(id=session_id)
                     eval_res = calculate_session_grade(session.measurements or {})
                     grade_value = eval_res['overall_grade']
                     if not feedback:
