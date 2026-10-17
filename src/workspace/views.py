@@ -441,12 +441,15 @@ class LessonSessionViewSet(ModelViewSet):
 
     def perform_update(self, serializer):
         user = self.request.user
-        # A student may not hand their session to, or steal one from,
-        # another account by PATCHing `student`.
         if is_staff_user(user):
             serializer.save()
-        else:
-            serializer.save(student=user)
+            return
+        # A student may not hand their session to, or steal one from, another
+        # account by PATCHing `student`; nor repoint it at a different lesson.
+        # The experiment a session belongs to is what binds its result to a
+        # Moodle assignment, so letting it move would defeat that check: do an
+        # easy experiment, repoint the session at a hard one, submit.
+        serializer.save(student=user, lesson=serializer.instance.lesson)
 
     @action(detail=True, methods=['get', 'post'], url_path='evaluate-grade')
     def evaluate_grade(self, request, pk=None):

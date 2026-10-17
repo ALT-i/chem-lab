@@ -195,6 +195,12 @@ class MoodleEndpointDegradationTests(TestCase):
         self.assertEqual(res.data['code'], 'moodle_not_configured')
 
     def test_grade_submission_reports_not_configured(self):
+        # Exercised through staff: a student with no session is refused
+        # earlier, before Moodle configuration is ever consulted.
+        instructor = User.objects.create_instructor(
+            email='degrade.teacher@example.com', password='p', role=User.Roles.INSTRUCTOR
+        )
+        self.client.force_authenticate(user=instructor)
         with mock.patch('src.common.moodle_client.MOODLE_BASE_URL', ''), \
              mock.patch('src.common.moodle_client.MOODLE_TOKEN', ''):
             res = self.client.post(
@@ -660,3 +666,31 @@ class MoodleAssignmentBindingTests(TestCase):
             )
         self.assertEqual(res.status_code, 200, res.data)
         self.assertEqual(res.data['results'][0]['status'], 'ok')
+
+    def test_student_cannot_repoint_a_session_at_another_lesson(self):
+        """Moving the session's lesson would defeat the assignment binding."""
+        res = self.client.patch(
+            f'/api/v1/workspace/sessions/{self.easy_session.id}/',
+            {'lesson': self.hard.id},
+            format='json',
+        )
+        self.easy_session.refresh_from_db()
+        self.assertEqual(self.easy_session.lesson_id, self.easy.id, res.data)
+
+    def test_repointed_session_still_cannot_reach_the_other_assignment(self):
+        self.client.patch(
+            f'/api/v1/workspace/sessions/{self.easy_session.id}/',
+            {'lesson': self.hard.id},
+            format='json',
+        )
+        with mock.patch('src.common.moodle_client.requests.post') as posted:
+            res = self.client.post(
+                '/api/v1/moodle/grades/assignment/',
+                {'assignment_id': 22,
+                 'grades': [{'email': 'me@example.com',
+                             'session_id': str(self.easy_session.id)}]},
+                format='json',
+            )
+        self.assertEqual(res.status_code, 403, res.data)
+        self.assertEqual(res.data['code'], 'assignment_mismatch')
+        posted.assert_not_called()
