@@ -110,3 +110,6 @@ venv.bak/
 # media files
 media/*
 !media/.gitkeep
+
+# release bundles built by release/build-release.sh
+release-dist/

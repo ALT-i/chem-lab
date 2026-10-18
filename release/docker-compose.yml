@@ -1,0 +1,55 @@
+# CHM Virtual Lab: production setup for NOUN.
+# Lives in /opt/chemlab next to .env. Start or apply changes with:  docker compose up -d
+# The release to run is set by CHEMLAB_VERSION in .env.
+services:
+  db:
+    image: postgres:14
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+  web:
+    image: chemlab-backend:${CHEMLAB_VERSION:?Set CHEMLAB_VERSION in .env}
+    restart: unless-stopped
+    env_file: .env
+    command: sh -c "python manage.py migrate --noinput && python manage.py collectstatic --noinput && sh /entrypoint-web.sh"
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./media:/app/media
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  worker:
+    image: chemlab-backend:${CHEMLAB_VERSION:?Set CHEMLAB_VERSION in .env}
+    restart: unless-stopped
+    env_file: .env
+    command: sh /entrypoint-queue.sh
+    depends_on:
+      - web
+
+  admin:
+    image: chemlab-admin:${CHEMLAB_VERSION:?Set CHEMLAB_VERSION in .env}
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "127.0.0.1:8080:80"
+
+volumes:
+  db-data:

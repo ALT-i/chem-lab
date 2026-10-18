@@ -1,6 +1,5 @@
 .*
 !.coveragerc
-!.env
 
 .git
 .gitignore
