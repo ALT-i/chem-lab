@@ -30,7 +30,9 @@ class LessonProcedureAuditTests(TestCase):
         self.beaker = Apparatus.objects.create(name='400cm3 Beaker', volume=400, precision=25)
         self.cylinder = Apparatus.objects.create(name='100cm3 Measuring Cylinder', volume=100, precision=0.5)
         self.hcl = Substance.objects.create(name='Hydrochloric Acid', formula='HCl')
-        self.apparatus_names = {self.beaker.name, self.cylinder.name}
+        self.flask = Apparatus.objects.create(name='250cm3 Conical Flask', volume=250, precision=5)
+        self.apparatus_names = {self.beaker.name, self.cylinder.name, self.flask.name}
+        self.precision = {self.beaker.name: 25.0, self.cylinder.name: 0.5, self.flask.name: 5.0}
         self.substance_names = {self.hcl.name}
 
     def _lesson(self, procedure, instructions, tools=(), substances=()):
@@ -53,12 +55,16 @@ class LessonProcedureAuditTests(TestCase):
             '<ol><li>Measure 20 cm3 using a dry measuring cylinder.</li><li>Pour.</li><li>Shake.</li></ol>',
             tools=[self.beaker], substances=[self.hcl],
         )
-        report = audit_lesson(lesson, self.apparatus_names, self.substance_names)
+        report = audit_lesson(lesson, self.apparatus_names, self.substance_names, self.precision)
         self.assertEqual(report['method_steps'], 3)
         self.assertEqual(report['bench_steps'], 1)
+        # a step-count gap is advisory: most extra method steps are not bench actions
+        self.assertIn('method has 3 steps but the bench tracks 1', ' | '.join(report['warnings']))
+        self.assertNotIn('method has', ' | '.join(report['problems']))
         joined = ' | '.join(report['problems'])
-        self.assertIn('method has 3 steps but the bench tracks 1', joined)
-        self.assertIn('no cylinder among its apparatus', joined)
+        self.assertIn('method measures 20 cm3 with a measuring cylinder, but the bench measures it without one', joined)
+        # and the beaker cannot measure a +/-0.5 step
+        self.assertIn('400cm3 Beaker (+/-25.0) cannot measure a +/-0.5 step', joined)
 
     def test_flags_unknown_names_ephemeral_images_and_missing_tolerance(self):
         lesson = self._lesson(
@@ -95,3 +101,50 @@ class LessonProcedureAuditTests(TestCase):
     def test_lesson_with_no_procedure_is_flagged(self):
         lesson = self._lesson({}, '<ol><li>a</li></ol>')
         self.assertIn('no bench procedure at all', audit_lesson(lesson, self.apparatus_names, self.substance_names)['problems'])
+
+
+    def test_pipette_transfer_into_a_flask_is_not_flagged(self):
+        # mirrors the client: the pipette measured it, not the flask
+        lesson = self._lesson(
+            {'steps': [
+                {'mergeRules': [self._rule('5ml Pippette', 'Hydrochloric Acid', result='Pipette with 25cm3 HCl', targetVolume=25, tolerance=0.5)]},
+                {'mergeRules': [self._rule('250cm3 Conical Flask', 'Pipette with 25cm3 HCl', result='Z', targetVolume=25, tolerance=0.5)]},
+            ]},
+            '<ol><li>a</li><li>b</li></ol>', tools=[self.flask], substances=[self.hcl],
+        )
+        problems = audit_lesson(lesson, self.apparatus_names | {'5ml Pippette'}, self.substance_names, self.precision)['problems']
+        self.assertFalse([p for p in problems if 'cannot measure' in p], problems)
+
+    def test_a_flask_measuring_on_its_own_is_flagged(self):
+        lesson = self._lesson(
+            {'steps': [{'mergeRules': [self._rule('250cm3 Conical Flask', 'Hydrochloric Acid', targetVolume=25, tolerance=0.5)]}]},
+            '<ol><li>a</li></ol>', tools=[self.flask], substances=[self.hcl],
+        )
+        joined = ' | '.join(audit_lesson(lesson, self.apparatus_names, self.substance_names, self.precision)['problems'])
+        self.assertIn('250cm3 Conical Flask (+/-5.0) cannot measure a +/-0.5 step', joined)
+
+
+    def test_cylinder_named_for_a_step_the_bench_skips_is_not_flagged(self):
+        # Experiment 2B quotes 2A's preparation ("measure 20 cm3 ... measuring
+        # cylinder") but its bench starts from the prepared acid and never
+        # measures 20 cm3 at all.
+        lesson = self._lesson(
+            {'steps': [{'mergeRules': [self._rule('250cm3 Conical Flask', 'Pipette with 25cm3 HCl', targetVolume=25, tolerance=0.5)]}]},
+            '<ol><li>Measure accurately 20cm<sup>3</sup> of HCl using a dry measuring cylinder.</li></ol>',
+            tools=[self.flask], substances=[self.hcl],
+        )
+        joined = ' | '.join(audit_lesson(lesson, self.apparatus_names, self.substance_names, self.precision)['problems'])
+        self.assertNotIn('measuring cylinder', joined)
+
+    def test_cylinder_rule_is_satisfied_once_the_bench_uses_one(self):
+        # 9A after re-authoring: 80 cm3 is measured in the cylinder, then poured
+        lesson = self._lesson(
+            {'steps': [
+                {'mergeRules': [self._rule('100cm3 Measuring Cylinder', 'Hydrochloric Acid', result='Acid In Cylinder', targetVolume=80, tolerance=0.5)]},
+                {'mergeRules': [self._rule('250cm3 Conical Flask', 'Acid In Cylinder', targetVolume=80, tolerance=0.5)]},
+            ]},
+            '<ol><li>Transfer 80cm3 of water (use a measuring cylinder) to the flask.</li><li>b</li></ol>',
+            tools=[self.cylinder, self.flask], substances=[self.hcl],
+        )
+        joined = ' | '.join(audit_lesson(lesson, self.apparatus_names, self.substance_names, self.precision)['problems'])
+        self.assertNotIn('measuring cylinder', joined)
